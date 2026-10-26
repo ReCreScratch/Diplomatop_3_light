@@ -206,7 +206,17 @@ one per player, anyone can end it), idle warning, surrender/spectator, kick. Sav
 
 **Milestone 1:** no open rule questions left (G50–G53 decided, see sections 4, 5 and 9).
 
-**Answered by the map:** G18 (terrain), G19 (neutral provinces), start gold and starting armies.
+**Europa map** (`maps/europa/`, see IMPLEMENTATION.md section 4.3):
+| ID | Question | Current state |
+|---|---|---|
+| M1 | The screenshot is cut off at the bottom by the taskbar. Does the map continue further south (more of Africa)? | map ends at the last visible row |
+| M2 | Scandinavia, Russia and the Ottoman region have no capitals or borders. Playable later, neutral provinces, or blocked? | blocked (`?SE`, `?RU`, `?TR`) |
+| M3 | Income per province is not in the picture. | placeholder: half the field count, 1–5 |
+| M4 | Start armies and start gold per nation? | none / rules config |
+| M5 | Only 7 nations on this map, the game supports 12. Fine for testing? | 7 |
+| M6 | Province and capital names (chosen by Claude) – OK? | see `map.json` |
+
+G18 (terrain) is answered by the map: only land and sea. G19 (neutral provinces) depends on M2.
 
 **Ships (milestone 2):**
 | ID | Question | Default |

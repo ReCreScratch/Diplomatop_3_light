@@ -50,7 +50,8 @@ diplomatio/
     storage.py            save/load JSON
   client/
     index.html            map, order panel, order list
-  maps/                   map files
+  maps/europa/            map.json (logic), theme.json (looks), reference + preview images
+  tools/map_preview.py    draws a map preview PNG for checking
   rules/default.json      default rules config
   tests/
 ```
@@ -111,34 +112,48 @@ Clicking a player row offers "Gold senden"; clicking an own province offers "Pro
 **Last turn:** step-by-step replay (◀ ▶) through the resolution in player order, highlighting each move, fight
 and conquest on the map, with a one-line text per step.
 
-## 4. Map format
-A JSON file, readable and editable by hand, so it can replace the editor for now. The grid is written as rows of
-tokens; each token is a province code, `~` is sea. `*` marks the capital, `+` marks a port (milestone 2).
-Rows are offset like a real hex map (every second row shifted by half a field).
+## 4. Maps and graphics
 
-```json
-{
-  "name": "Test map",
-  "grid": [
-    "AA  AA* BB  BB  ~~",
-    "  AA  BB  BB* ~~  ~~",
-    "CC  CC* CC  ~~  ~~"
-  ],
-  "provinces": {
-    "AA": {"name": "Nordmark", "income": 3, "owner": 1},
-    "BB": {"name": "Ostland",  "income": 4, "owner": 2},
-    "CC": {"name": "Südtal",   "income": 2, "owner": null}
-  },
-  "players": {
-    "1": {"name": "Rot",  "color": "#c0392b", "start_gold": 10},
-    "2": {"name": "Blau", "color": "#2e86c1", "start_gold": 10}
-  },
-  "start_armies": [{"owner": 1, "field": [1, 0], "divisions": 5}],
-  "rules": {"division_cost": 3}
-}
-```
-The real map will be recreated from a picture the user provides. The loader checks that every province is one
-connected area and has exactly one capital.
+### 4.1 Map folder
+Each map is a folder under `maps/`, e.g. `maps/europa/`:
+
+| File | Content | Used by |
+|---|---|---|
+| `map.json` | Game logic only: grid, provinces, nations, start armies, rule overrides | engine |
+| `theme.json` | Looks only: nation colours, terrain colours, outlines, borders, capital icon, (later) textures | client |
+| `reference.webp` | The original picture the map was recreated from | humans |
+| `preview.png` | Drawn from `map.json` + `theme.json` by `tools/map_preview.py` to check the map | humans |
+
+**Grid:** hexes are **flat-top**, laid out in columns; **odd columns sit half a field higher** than even ones.
+`grid` is a list of text rows, one token per field, separated by spaces. Coordinates are `[column, row]`, counted from
+the top-left token. Tokens:
+- a province code (`GB1`, `ES10`, …) – land belonging to that province
+- `~~` sea, `##` edge of the map (not playable), `..` no field
+- `?SE`, `?RU`, `?TR` – land without provinces yet (Scandinavia, Russia, Ottoman region); blocked for now
+
+**Provinces:** `{"name", "capital_name", "capital": [c, r], "income", "owner"}`. Ports are added in milestone 2.
+
+The loader checks: every province is connected (islands may be separate fields of the same province),
+has exactly one capital inside it, and every owner exists.
+
+### 4.2 Keeping graphics replaceable
+- The engine and `map.json` contain **no colours, sizes or images**. Nations and terrain are only IDs.
+- All looks come from `theme.json` (per map) and a few CSS variables in the client.
+- The client has **one rendering module** (`client/render.js`) that turns game state into SVG. Everything else
+  (panels, input, server calls) talks to it only through functions like `drawMap(state)`, `highlight(field)`,
+  `showArrows(orders)`. A graphics update (textures, icons, a different renderer such as canvas or a game engine)
+  means replacing this module and the theme – nothing else.
+- Icons and textures go to `client/assets/` and are referenced by name from `theme.json`
+  (e.g. `"textures": {"~~": "sea.png"}`), so new art drops in without code changes.
+
+### 4.3 Europa map (recreated from the user's picture)
+- 61 × 35 fields, 64 provinces in 7 nations: Großbritannien (9), Spanien (10), Frankreich (10), Deutsches Reich (10),
+  Österreich-Ungarn (10), Italien (8), Nordafrika (7).
+- The three marked single-field islands belong to the province their arrow points to
+  (Shetland and Orkney → Highlands, Balearen → Katalonien).
+- Province and capital names were chosen by Claude and are free to change.
+- **Placeholders:** income = half the field count (1–5); no start armies; start gold from the rules config.
+- Open points: see RULES.md section 14 ("Europa map").
 
 ## 5. Milestones
 
@@ -153,5 +168,5 @@ Milestone 1 build order: engine with tests on a tiny test map → server → cli
 
 ## 6. Before building starts
 - [x] User confirms or changes the small open defaults G50–G53 (RULES.md section 14)
-- [ ] User provides the map picture (can come later; the test map is enough to start)
+- [x] User provides the map picture → recreated as `maps/europa/` (open points M1–M6 in RULES.md)
 - [ ] User gives the go to start

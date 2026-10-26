@@ -1,0 +1,35 @@
+{
+ "description": "Nur Darstellung. Farben und spaeter Texturen hier aendern, ohne die Spiellogik anzufassen.",
+ "background": "#1c120d",
+ "hex_outline": "#1d2421",
+ "province_border": "#ffffff",
+ "capital_icon": "S",
+ "neutral_color": "#8a8a80",
+ "nation_colors": {
+  "GB": "#7a2620",
+  "ES": "#c4501f",
+  "FR": "#2d3537",
+  "DE": "#5c3d25",
+  "AT": "#d5841f",
+  "IT": "#8fb12a",
+  "NA": "#5a2a2e"
+ },
+ "terrain": {
+  "~~": {
+   "fill": "#3f7a68"
+  },
+  "##": {
+   "fill": "#2a1e17"
+  },
+  "?SE": {
+   "fill": "#cfb196"
+  },
+  "?RU": {
+   "fill": "#4f1636"
+  },
+  "?TR": {
+   "fill": "#246a46"
+  }
+ },
+ "textures": {}
+}

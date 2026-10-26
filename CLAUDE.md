@@ -12,5 +12,7 @@ Lightweight online prototype of Diplomatio, a hex-map diplomacy strategy game fo
 - Modular: order types, resolution phases, combat formula and turn-order rule are registries; unit types are data.
 - Engine (`engine/`) is pure Python with no I/O and is covered by pytest scenario tests.
 - Keep it small: few dependencies, no client build step, plain JS + SVG.
+- Graphics stay replaceable: no colours or images in engine or `map.json`; looks come from `theme.json` and the
+  single client render module (IMPLEMENTATION.md section 4.2).
 - UI text is German. PC browser first; mobile only where cheap.
 - Work milestone by milestone (IMPLEMENTATION.md section 5). Milestone 1 excludes ships, alliances and the editor.

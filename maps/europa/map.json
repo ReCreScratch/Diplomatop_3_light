@@ -1,0 +1,528 @@
+{
+ "name": "Europa",
+ "version": 1,
+ "layout": {
+  "orientation": "flat-top",
+  "odd_columns": "raised half a field",
+  "coords": "[column,row] counted from the top-left token"
+ },
+ "legend": {
+  "~~": "Meer",
+  "##": "Rand (nicht spielbar)",
+  "..": "kein Feld",
+  "?SE/?RU/?TR": "Land ohne Provinzen (noch nicht festgelegt, vorerst gesperrt)",
+  "andere": "Provinzcode"
+ },
+ "nations": {
+  "GB": {
+   "name": "Großbritannien"
+  },
+  "ES": {
+   "name": "Spanien"
+  },
+  "FR": {
+   "name": "Frankreich"
+  },
+  "DE": {
+   "name": "Deutsches Reich"
+  },
+  "AT": {
+   "name": "Österreich-Ungarn"
+  },
+  "IT": {
+   "name": "Italien"
+  },
+  "NA": {
+   "name": "Nordafrika"
+  }
+ },
+ "provinces": {
+  "GB1": {
+   "name": "Island",
+   "capital_name": "Reykjavík",
+   "capital": [16, 3],
+   "income": 5,
+   "owner": "GB"
+  },
+  "GB2": {
+   "name": "Highlands",
+   "capital_name": "Inverness",
+   "capital": [21, 10],
+   "income": 3,
+   "owner": "GB"
+  },
+  "GB3": {
+   "name": "Strathclyde",
+   "capital_name": "Glasgow",
+   "capital": [19, 12],
+   "income": 2,
+   "owner": "GB"
+  },
+  "GB4": {
+   "name": "Lothian",
+   "capital_name": "Edinburgh",
+   "capital": [21, 13],
+   "income": 2,
+   "owner": "GB"
+  },
+  "GB5": {
+   "name": "Northumbria",
+   "capital_name": "York",
+   "capital": [20, 14],
+   "income": 2,
+   "owner": "GB"
+  },
+  "GB6": {
+   "name": "Wales",
+   "capital_name": "Cardiff",
+   "capital": [19, 16],
+   "income": 2,
+   "owner": "GB"
+  },
+  "GB7": {
+   "name": "Südengland",
+   "capital_name": "London",
+   "capital": [21, 16],
+   "income": 3,
+   "owner": "GB"
+  },
+  "GB8": {
+   "name": "Ulster",
+   "capital_name": "Belfast",
+   "capital": [16, 13],
+   "income": 2,
+   "owner": "GB"
+  },
+  "GB9": {
+   "name": "Leinster",
+   "capital_name": "Dublin",
+   "capital": [15, 15],
+   "income": 2,
+   "owner": "GB"
+  },
+  "ES1": {
+   "name": "Galicien",
+   "capital_name": "Santiago",
+   "capital": [11, 25],
+   "income": 2,
+   "owner": "ES"
+  },
+  "ES2": {
+   "name": "Asturien",
+   "capital_name": "Oviedo",
+   "capital": [13, 25],
+   "income": 2,
+   "owner": "ES"
+  },
+  "ES3": {
+   "name": "León",
+   "capital_name": "León",
+   "capital": [12, 26],
+   "income": 3,
+   "owner": "ES"
+  },
+  "ES4": {
+   "name": "Aragón",
+   "capital_name": "Saragossa",
+   "capital": [16, 26],
+   "income": 3,
+   "owner": "ES"
+  },
+  "ES5": {
+   "name": "Katalonien",
+   "capital_name": "Barcelona",
+   "capital": [18, 26],
+   "income": 3,
+   "owner": "ES"
+  },
+  "ES6": {
+   "name": "Nordportugal",
+   "capital_name": "Porto",
+   "capital": [11, 28],
+   "income": 3,
+   "owner": "ES"
+  },
+  "ES7": {
+   "name": "Kastilien",
+   "capital_name": "Madrid",
+   "capital": [15, 28],
+   "income": 3,
+   "owner": "ES"
+  },
+  "ES8": {
+   "name": "Valencia",
+   "capital_name": "Valencia",
+   "capital": [17, 29],
+   "income": 3,
+   "owner": "ES"
+  },
+  "ES9": {
+   "name": "Südportugal",
+   "capital_name": "Lissabon",
+   "capital": [12, 29],
+   "income": 3,
+   "owner": "ES"
+  },
+  "ES10": {
+   "name": "Andalusien",
+   "capital_name": "Sevilla",
+   "capital": [15, 30],
+   "income": 2,
+   "owner": "ES"
+  },
+  "FR1": {
+   "name": "Bretagne",
+   "capital_name": "Rennes",
+   "capital": [19, 20],
+   "income": 3,
+   "owner": "FR"
+  },
+  "FR2": {
+   "name": "Normandie",
+   "capital_name": "Rouen",
+   "capital": [21, 20],
+   "income": 3,
+   "owner": "FR"
+  },
+  "FR3": {
+   "name": "Île-de-France",
+   "capital_name": "Paris",
+   "capital": [23, 19],
+   "income": 3,
+   "owner": "FR"
+  },
+  "FR4": {
+   "name": "Flandern",
+   "capital_name": "Lille",
+   "capital": [25, 19],
+   "income": 2,
+   "owner": "FR"
+  },
+  "FR5": {
+   "name": "Loire",
+   "capital_name": "Nantes",
+   "capital": [20, 21],
+   "income": 3,
+   "owner": "FR"
+  },
+  "FR6": {
+   "name": "Orléanais",
+   "capital_name": "Orléans",
+   "capital": [23, 22],
+   "income": 4,
+   "owner": "FR"
+  },
+  "FR7": {
+   "name": "Burgund",
+   "capital_name": "Dijon",
+   "capital": [25, 22],
+   "income": 3,
+   "owner": "FR"
+  },
+  "FR8": {
+   "name": "Aquitanien",
+   "capital_name": "Bordeaux",
+   "capital": [19, 24],
+   "income": 3,
+   "owner": "FR"
+  },
+  "FR9": {
+   "name": "Languedoc",
+   "capital_name": "Toulouse",
+   "capital": [22, 24],
+   "income": 3,
+   "owner": "FR"
+  },
+  "FR10": {
+   "name": "Provence",
+   "capital_name": "Marseille",
+   "capital": [24, 24],
+   "income": 3,
+   "owner": "FR"
+  },
+  "DE1": {
+   "name": "Dänemark",
+   "capital_name": "Kopenhagen",
+   "capital": [28, 13],
+   "income": 3,
+   "owner": "DE"
+  },
+  "DE2": {
+   "name": "Niederlande",
+   "capital_name": "Amsterdam",
+   "capital": [26, 16],
+   "income": 4,
+   "owner": "DE"
+  },
+  "DE3": {
+   "name": "Holstein",
+   "capital_name": "Hamburg",
+   "capital": [31, 16],
+   "income": 3,
+   "owner": "DE"
+  },
+  "DE4": {
+   "name": "Pommern",
+   "capital_name": "Stettin",
+   "capital": [34, 16],
+   "income": 3,
+   "owner": "DE"
+  },
+  "DE5": {
+   "name": "Preußen",
+   "capital_name": "Königsberg",
+   "capital": [35, 15],
+   "income": 3,
+   "owner": "DE"
+  },
+  "DE6": {
+   "name": "Rheinland",
+   "capital_name": "Köln",
+   "capital": [29, 18],
+   "income": 4,
+   "owner": "DE"
+  },
+  "DE7": {
+   "name": "Hannover",
+   "capital_name": "Hannover",
+   "capital": [31, 18],
+   "income": 3,
+   "owner": "DE"
+  },
+  "DE8": {
+   "name": "Brandenburg",
+   "capital_name": "Berlin",
+   "capital": [34, 18],
+   "income": 4,
+   "owner": "DE"
+  },
+  "DE9": {
+   "name": "Schwaben",
+   "capital_name": "Stuttgart",
+   "capital": [29, 20],
+   "income": 4,
+   "owner": "DE"
+  },
+  "DE10": {
+   "name": "Bayern",
+   "capital_name": "München",
+   "capital": [32, 19],
+   "income": 3,
+   "owner": "DE"
+  },
+  "AT1": {
+   "name": "Tirol",
+   "capital_name": "Innsbruck",
+   "capital": [30, 22],
+   "income": 3,
+   "owner": "AT"
+  },
+  "AT2": {
+   "name": "Österreich",
+   "capital_name": "Wien",
+   "capital": [32, 22],
+   "income": 3,
+   "owner": "AT"
+  },
+  "AT3": {
+   "name": "Böhmen",
+   "capital_name": "Prag",
+   "capital": [35, 22],
+   "income": 3,
+   "owner": "AT"
+  },
+  "AT4": {
+   "name": "Ungarn",
+   "capital_name": "Budapest",
+   "capital": [37, 22],
+   "income": 3,
+   "owner": "AT"
+  },
+  "AT5": {
+   "name": "Oberungarn",
+   "capital_name": "Kaschau",
+   "capital": [40, 21],
+   "income": 5,
+   "owner": "AT"
+  },
+  "AT6": {
+   "name": "Galizien",
+   "capital_name": "Lemberg",
+   "capital": [42, 20],
+   "income": 4,
+   "owner": "AT"
+  },
+  "AT7": {
+   "name": "Kroatien",
+   "capital_name": "Zagreb",
+   "capital": [34, 23],
+   "income": 4,
+   "owner": "AT"
+  },
+  "AT8": {
+   "name": "Banat",
+   "capital_name": "Temeswar",
+   "capital": [38, 23],
+   "income": 5,
+   "owner": "AT"
+  },
+  "AT9": {
+   "name": "Siebenbürgen",
+   "capital_name": "Klausenburg",
+   "capital": [41, 23],
+   "income": 3,
+   "owner": "AT"
+  },
+  "AT10": {
+   "name": "Bosnien",
+   "capital_name": "Sarajevo",
+   "capital": [35, 25],
+   "income": 3,
+   "owner": "AT"
+  },
+  "IT1": {
+   "name": "Lombardei",
+   "capital_name": "Mailand",
+   "capital": [27, 24],
+   "income": 3,
+   "owner": "IT"
+  },
+  "IT2": {
+   "name": "Venetien",
+   "capital_name": "Venedig",
+   "capital": [29, 25],
+   "income": 3,
+   "owner": "IT"
+  },
+  "IT3": {
+   "name": "Korsika",
+   "capital_name": "Ajaccio",
+   "capital": [27, 27],
+   "income": 1,
+   "owner": "IT"
+  },
+  "IT4": {
+   "name": "Sardinien",
+   "capital_name": "Cagliari",
+   "capital": [27, 29],
+   "income": 2,
+   "owner": "IT"
+  },
+  "IT5": {
+   "name": "Toskana",
+   "capital_name": "Florenz",
+   "capital": [30, 27],
+   "income": 2,
+   "owner": "IT"
+  },
+  "IT6": {
+   "name": "Latium",
+   "capital_name": "Rom",
+   "capital": [32, 27],
+   "income": 2,
+   "owner": "IT"
+  },
+  "IT7": {
+   "name": "Kampanien",
+   "capital_name": "Neapel",
+   "capital": [34, 29],
+   "income": 2,
+   "owner": "IT"
+  },
+  "IT8": {
+   "name": "Sizilien",
+   "capital_name": "Palermo",
+   "capital": [32, 31],
+   "income": 2,
+   "owner": "IT"
+  },
+  "NA1": {
+   "name": "Marokko",
+   "capital_name": "Rabat",
+   "capital": [11, 34],
+   "income": 3,
+   "owner": "NA"
+  },
+  "NA2": {
+   "name": "Rif",
+   "capital_name": "Tanger",
+   "capital": [14, 33],
+   "income": 2,
+   "owner": "NA"
+  },
+  "NA3": {
+   "name": "Oranie",
+   "capital_name": "Oran",
+   "capital": [16, 33],
+   "income": 2,
+   "owner": "NA"
+  },
+  "NA4": {
+   "name": "Algier",
+   "capital_name": "Algier",
+   "capital": [19, 34],
+   "income": 2,
+   "owner": "NA"
+  },
+  "NA5": {
+   "name": "Konstantine",
+   "capital_name": "Constantine",
+   "capital": [23, 34],
+   "income": 2,
+   "owner": "NA"
+  },
+  "NA6": {
+   "name": "Tunesien",
+   "capital_name": "Tunis",
+   "capital": [25, 33],
+   "income": 2,
+   "owner": "NA"
+  },
+  "NA7": {
+   "name": "Tripolitanien",
+   "capital_name": "Tripolis",
+   "capital": [27, 34],
+   "income": 2,
+   "owner": "NA"
+  }
+ },
+ "grid": [
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ?RU  ?RU  ~~   ?RU  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB1  GB1  GB1  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ?SE  ?SE  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ~~   ~~   ~~   ~~   ~~   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB1  GB1  GB1  GB1  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ?SE  ?SE  ?RU  ?RU  ?RU  ?RU  ~~   ?RU  ~~   ~~   ~~   ~~   ~~   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB1  GB1  GB1  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ?RU  ?RU  ?RU  ?RU  ?RU  ~~   ~~   ~~   ~~   ~~   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ?SE  ~~   ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ~~   ~~   ~~   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB2  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ~~   ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ~~   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ~~   ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB2  ~~   ~~   ~~   ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ~~   ~~   ?RU  ?RU  ?RU  ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB2  ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ?SE  ~~   ~~   ~~   ~~   ?RU  ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB2  GB2  GB2  ~~   ~~   ~~   ~~   ~~   ?SE  ~~   ~~   ?SE  ?SE  ?SE  ?SE  ~~   ~~   ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB3  GB3  GB3  GB2  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?SE  ?SE  ?SE  ~~   ?SE  ~~   ?RU  ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB8  ~~   ~~   GB3  GB3  ~~   ~~   ~~   ~~   ~~   ~~   ~~   DE1  ~~   ?SE  ?SE  ?SE  ~~   ~~   ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB9  GB8  GB8  ~~   GB5  GB4  GB4  ~~   ~~   ~~   ~~   ~~   DE1  DE1  ~~   ~~   ?SE  ~~   ~~   ~~   ~~   DE5  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB9  GB9  GB9  GB8  ~~   GB5  GB5  GB4  ~~   ~~   ~~   ~~   ~~   DE1  DE1  ~~   ~~   ~~   ~~   ~~   DE5  ~~   DE5  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB9  ~~   ~~   GB6  GB5  GB5  GB4  GB7  ~~   ~~   ~~   DE2  ~~   DE1  DE1  DE3  DE3  DE3  DE5  DE5  DE5  DE5  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB6  GB6  GB7  GB7  GB7  ~~   DE2  DE2  DE2  DE2  DE6  DE3  DE3  DE3  DE7  DE3  DE4  DE4  DE4  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   GB6  ~~   GB6  GB7  GB7  ~~   ~~   FR3  DE2  DE2  DE2  DE6  DE6  DE7  DE7  DE7  DE4  DE4  DE4  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   FR2  FR3  FR3  FR4  FR4  DE6  DE6  DE6  DE7  DE7  DE7  DE4  DE8  DE8  DE8  ?RU  ?RU  ?RU  ?RU  ?RU  AT6  AT6  AT6  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   FR1  FR1  FR1  FR1  FR2  FR2  FR3  FR3  FR4  FR4  DE6  DE9  DE6  DE10 DE10 DE10 DE8  DE8  DE8  DE8  ?RU  ?RU  ?RU  AT5  AT5  AT6  AT6  AT6  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   FR1  FR1  FR5  FR2  FR2  FR3  FR3  FR4  FR7  DE9  DE9  DE9  DE9  DE10 DE10 DE10 AT3  DE8  AT3  AT4  AT4  AT5  AT5  AT5  AT6  AT6  ?TR  ?RU  ~~   ?RU  ?RU  ?RU  ~~   ~~   ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   FR5  FR5  FR5  FR2  FR6  FR6  FR7  FR7  DE9  DE9  DE9  AT1  DE10 AT2  AT3  AT3  AT3  AT4  AT4  AT4  AT5  AT5  AT5  AT9  AT6  ?TR  ?TR  ~~   ~~   ?RU  ~~   ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   FR5  FR5  FR5  FR6  FR6  FR6  FR7  FR7  IT1  AT1  AT1  AT1  AT1  AT2  AT2  AT7  AT3  AT4  AT4  AT8  AT5  AT5  AT5  AT9  AT9  ?TR  ~~   ~~   ?RU  ?RU  ?RU  ~~   ?RU  ?RU  ?RU  ?RU  ?RU  ?RU  ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES1  ~~   ~~   ~~   ~~   ~~   ~~   FR8  FR8  FR6  FR6  FR6  FR10 FR7  IT1  IT1  IT1  AT1  AT2  AT2  AT2  AT7  AT7  AT7  AT8  AT8  AT8  AT8  AT8  AT9  AT9  ?TR  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?RU  ?TR  ?RU  ?RU  ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES1  ES1  ES2  ES2  ~~   ~~   ~~   FR8  FR8  FR8  FR9  FR9  FR10 FR10 FR10 IT1  IT1  IT2  IT2  IT2  ~~   ~~   AT7  AT7  AT7  AT10 AT8  AT8  AT8  AT8  AT9  ?TR  ?TR  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?TR  ?TR  ?TR  ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES1  ES1  ES2  ES2  ES4  ES4  ES4  ES5  FR8  FR9  FR9  ~~   FR9  FR10 FR10 ~~   ~~   ~~   IT2  IT2  ~~   ~~   ~~   AT7  AT10 AT10 AT10 ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ~~   ~~   ~~   ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES6  ES3  ES3  ES2  ES7  ES4  ES4  ES4  ES5  ES5  ES5  FR9  ~~   ~~   ~~   ~~   ~~   IT3  ~~   IT2  IT5  IT5  ~~   ~~   ~~   AT10 AT10 ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ~~   ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES6  ES3  ES3  ES3  ES7  ES7  ES7  ES4  ES5  ES5  ~~   ~~   ~~   ~~   ~~   ~~   ~~   IT3  ~~   ~~   IT5  IT5  IT6  ~~   ~~   ~~   ~~   AT10 ?TR  ?TR  ?TR  ?TR  ~~   ?TR  ~~   ~~   ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES6  ES6  ES9  ES3  ES7  ES7  ES8  ES8  ES8  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   IT6  IT6  IT6  IT7  ~~   ~~   ?TR  ?TR  ?TR  ~~   ~~   ~~   ~~   ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES6  ES6  ES9  ES9  ES10 ES7  ES8  ES8  ES8  ~~   ~~   ES5  ~~   ~~   ~~   ~~   IT4  IT4  ~~   ~~   ~~   ~~   ~~   IT6  IT7  IT7  ~~   ?TR  ?TR  ?TR  ?TR  ~~   ~~   ~~   ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ?TR  ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES9  ES9  ES9  ES10 ES10 ES10 ES8  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   IT4  IT4  ~~   ~~   ~~   ~~   ~~   ~~   IT7  ~~   ~~   ~~   ~~   ?TR  ?TR  ?TR  ~~   ~~   ?TR  ?TR  ?TR  ?TR  ~~   ?TR  ?TR  ?TR  ~~   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ES9  ~~   ES10 ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   IT8  ~~   IT8  ~~   ~~   ~~   ~~   ~~   ~~   ?TR  ?TR  ~~   ~~   ~~   ~~   ?TR  ~~   ?TR  ~~   ~~   ~~   ~~   ~~   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   NA1  ~~   NA2  ~~   NA3  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   IT8  IT8  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ?TR  ?TR  ?TR  ~~   ~~   ~~   ~~   ~~   ?TR  ?TR  ~~   ##   ##   ##   ##   ##   ##   ##   ##",
+  "~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   NA1  NA1  NA1  NA2  NA2  NA3  NA3  NA3  NA4  NA4  NA4  NA5  NA5  NA6  NA6  NA6  NA6  NA7  NA7  ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ~~   ##   ##   ##   ##   ##   ##   ##   ##",
+  "..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   NA1  ..   NA1  ..   NA2  ..   NA2  ..   NA3  ..   NA4  ..   NA5  ..   NA5  ..   NA6  ..   NA7  ..   NA7  ..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   ~~   ..   ##   ..   ##   ..   ##   ..   ##   .."
+ ],
+ "start_armies": [],
+ "rules": {}
+}
