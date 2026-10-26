@@ -85,29 +85,42 @@ diplomatio/
 (layout that wraps), but no mobile-specific effort. Guiding idea: giving orders must be fast, so everything
 happens on the map with as few clicks as possible.
 
-**Map**
-- SVG hex map kept clean: borders, owner colours, capitals, division counts. Province name, income and
-  conquest cost appear on hover.
-- Own orders are drawn on the map: move arrows with their **sequence number** (1, 2, 3 …), "+3" markers for
-  recruits, "−2" for disbands, a marker for forced march.
-- Clicking an army or own capital opens a small panel: recruit, disband, forced march, move.
-- Move: click the target, the shortest path is drawn; extra clicks only for detours. By default all movable
-  divisions move; the number is only changed to split. Freshly recruited divisions are shown as not movable.
-- Fight and conquest preview on hover ("du verlierst 3, sie verlieren 3", "Eroberung kostet 4 Divisionen"),
-  based on the current board.
-- Clicking an order marker deletes it.
+**Interaction model (revised after the first playtest).** Everything happens on the map; there is no side panel
+for actions. Nothing illegal can be entered.
+- **Selection:** left-click an own army or own capital selects it (pulsing outline). Esc, right-click on an
+  empty field or a click on non-reachable sea/void deselects. Tab / Shift+Tab cycles through own armies.
+- **Floating toolbar** (HTML overlay next to the selected field, follows pan/zoom): count stepper `− N +`,
+  buttons "Rekrutieren +N" (R), "Abrüsten N" (D), "Gewaltmarsch an/aus" (G). Buttons that are not possible are
+  disabled with the reason as tooltip (e.g. "Kein Gold mehr"). Hotkeys do the same: +/−, digits, Shift+wheel change N.
+  On a capital without army only the recruit part is shown.
+- **Move:** with an army selected, all fields reachable within its range (including a pending forced-march toggle)
+  are highlighted. Hovering a field draws the shortest path and shows the preview (fight/conquest via `/preview`)
+  in a tooltip at the cursor. **Left-click on a reachable field issues the move immediately** with N divisions
+  (default: all movable). Shift+click adds a waypoint for detours. If divisions remain (split), the army stays
+  selected with N set to the rest, so the next click sends the rest elsewhere (G56: several moves per army).
+- **Default N:** all movable divisions for moves/disband, 1 for recruiting; clamped to what is possible.
+- **Prevention:** a client `budget()` computes gold left (gold − recruits × cost − gold sent) and recruits left
+  (`my_recruit_limit` − pending recruits); all counts are clamped to it. If the server still returns an error for
+  the order just added, the client removes it again and shows the server text as a toast. Orders that became
+  invalid later (rare) stay red with the reason.
+- **Delete / undo:** clicking an order's marker (the numbered badge on an arrow, "+3", "−2") deletes that order
+  (arrows themselves are not clickable, so clicks on fields under them still work); Ctrl+Z undoes the
+  last change. A compact order list in the side area (hover = highlight on map, ✕ = delete) reaches hidden markers.
+- **Feedback:** context hint line below the map ("Ziel anklicken · Shift+Klick Umweg · G Gewaltmarsch · Esc"),
+  cursor tooltip, top bar "Gold 33 → 18", "Rekruten 4/27"; next to Ready an info "2 Armeen ohne Befehl" (no dialog).
+- **Transfers:** clicking a board row opens an inline gold field in that row (max = gold left, Enter sends).
+  Right-click on an own province opens a small on-map menu "Provinz verschenken an …" – the only menu.
+- Own orders are drawn on the map: numbered move arrows with division count, "+3" recruit and "−2" disband
+  markers, forced-march marker. Freshly recruited divisions are shown as not movable.
 
-**No separate order list.** Only the order of moves matters during resolution (transfers and recruitment run in
-fixed phases before, and gold is checked when the order is entered), and the numbered arrows already show it.
-To change the sequence, delete moves and enter them again. Gold sent and provinces given are shown in the
-board row of the receiving player. A small "Befehle: 3 Züge, 2 Rekrutierungen, 1 Überweisung" summary sits in the
-top bar.
-
-**Top bar:** turn number, timer, player order of this turn with ready marks (who is still missing), own gold and
-gold left after orders, Ready button. Orders that would be invalid turn red right away.
+**Top bar:** turn number, timer, player order with ready marks, gold → gold after orders, recruits left, order
+summary, Ready button.
 
 **Board:** for every player provinces, province share, income, upkeep, armies, total divisions (no gold).
-Clicking a player row offers "Gold senden"; clicking an own province offers "Provinz verschenken".
+
+**Lobby / start:** map tiles with a mini-map preview; nations as cards (theme colour, name, province count,
+taken ones greyed with player name); live player list with host crown; "Link kopieren" button; host button
+"Spiel starten (N Spieler)"; collapsible short rule summary from the rules config.
 
 **Last turn:** step-by-step replay (◀ ▶) through the resolution in player order, highlighting each move, fight
 and conquest on the map, with a one-line text per step.

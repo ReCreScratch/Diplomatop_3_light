@@ -5,30 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Diplomatio 3.0 light</title>
 <link rel="stylesheet" href="/client/style.css">
+<link rel="stylesheet" href="/client/lobby.css">
 </head>
 <body>
 <div id="toast" hidden></div>
 
-<section id="screen-start" class="screen" hidden>
-  <h1>Diplomatio 3.0 light</h1>
-  <label>Karte <select id="st-map"></select></label>
-  <button id="st-create" class="primary">Spiel erstellen</button>
+<section id="screen-start" class="screen lobby-screen" hidden>
+  <h1>Diplomatio <small>3.0 light</small></h1>
+  <p class="lead">Wähle eine Karte und lade deine Mitspieler ein.</p>
+  <div id="st-maps" class="map-tiles"></div>
+  <button id="st-create" class="primary big">Spiel erstellen</button>
   <p id="st-msg" class="msg"></p>
 </section>
 
-<section id="screen-join" class="screen" hidden>
+<section id="screen-join" class="screen lobby-screen" hidden>
   <h1>Spiel beitreten</h1>
-  <label>Name <input id="jn-name" maxlength="30"></label>
-  <label>Nation <select id="jn-nation"></select></label>
-  <button id="jn-go" class="primary">Beitreten</button>
+  <label class="field">Dein Name <input id="jn-name" maxlength="30" placeholder="Name eingeben" autocomplete="nickname"></label>
+  <div class="split">
+    <div id="jn-nations" class="nation-grid"></div>
+    <div id="jn-mini" class="mini"></div>
+  </div>
+  <button id="jn-go" class="primary big">Beitreten</button>
   <p id="jn-msg" class="msg"></p>
 </section>
 
-<section id="screen-lobby" class="screen" hidden>
-  <h1>Lobby</h1>
-  <p>Einladungslink: <input id="lb-link" readonly size="50"></p>
-  <ul id="lb-list"></ul>
-  <button id="lb-start" class="primary" hidden>Spiel starten</button>
+<section id="screen-lobby" class="screen lobby-screen" hidden>
+  <h1>Lobby <small id="lb-map"></small></h1>
+  <div class="split">
+    <ul id="lb-list" class="players"></ul>
+    <div id="lb-mini" class="mini"></div>
+  </div>
+  <div class="linkrow">
+    <input id="lb-link" readonly aria-label="Einladungslink">
+    <button id="lb-copy">Link kopieren</button>
+  </div>
+  <details id="lb-rules" class="rules"><summary>Regeln</summary><ul id="lb-rules-list"></ul></details>
+  <button id="lb-start" class="primary big" hidden>Spiel starten</button>
+  <p id="lb-wait" class="waiting" hidden>Warten auf den Host <span class="dots"><i>.</i><i>.</i><i>.</i></span></p>
   <p id="lb-msg" class="msg"></p>
 </section>
 
@@ -37,18 +50,25 @@
     <b id="tb-turn"></b> <span id="tb-timer"></span>
     <span id="tb-order"></span>
     <span id="tb-gold"></span>
+    <span id="tb-rec"></span>
     <span id="tb-sum"></span>
     <button id="btn-ready" class="primary">Bereit</button>
+    <span id="tb-idle" class="msg"></span>
     <span id="conn" class="msg"></span>
   </header>
   <main id="gamebody">
     <div id="mapwrap">
-      <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
-      <div id="infobar"><div id="ib-hover"></div><div id="ib-preview"></div></div>
+      <div id="mapbox">
+        <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="toolbar" hidden></div>
+        <div id="tip" hidden></div>
+        <div id="ctxmenu" hidden></div>
+      </div>
+      <div id="infobar"><div id="ib-hover"></div><div id="ib-hint"></div></div>
       <div id="replay"></div>
     </div>
     <aside id="side">
-      <div id="panel" hidden></div>
+      <div id="olist"></div>
       <table id="board"></table>
     </aside>
   </main>

@@ -22,6 +22,7 @@ def test_flow(tmp_path):
     gid, t1, t2 = setup_game(c)
     lob = c.get(f"/api/games/{gid}/lobby", params={"token": t1}).json()
     assert lob["status"] == "lobby" and lob["me"] == "GB" and lob["is_host"]
+    assert lob["rules"]["start_gold"] == 10 and "division_cost" in lob["rules"]
     assert lob["joined"] == {"GB": "Felix", "FR": "Anna"}
     assert not c.get(f"/api/games/{gid}/lobby", params={"token": t2}).json()["is_host"]
     assert c.get(f"/api/games/{gid}/state", params={"token": t1}).json()["status"] == "lobby"

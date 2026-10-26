@@ -105,10 +105,12 @@ class Games:
     def lobby(self, gid, token):
         with self.lock:
             game = self.get(gid)
-            nations = {c: n["name"] for c, n in self._map_data(game.map)["nations"].items()}
+            map_data = self._map_data(game.map)
+            nations = {c: n["name"] for c, n in map_data["nations"].items()}
+            rules = engine.load_rules(map_data.get("rules", {}), game.overrides)
             return {"game_id": gid, "map": game.map, "status": game.status, "nations": nations,
                     "joined": dict(game.joined), "me": game.tokens.get(token),
-                    "is_host": self._is_host(game, token)}
+                    "is_host": self._is_host(game, token), "host": game.host, "rules": rules}
 
     def join(self, gid, name, nation, host_token):
         with self.lock:
@@ -229,6 +231,7 @@ class Games:
         with self.lock:
             game, nation = self._running(gid, token)
             try:
-                return engine.preview_move(game.state, nation, body["army"], body["count"], body["path"])
+                return engine.preview_move(game.state, nation, body["army"], body["count"], body["path"],
+                                           body.get("forced_march"))
             except (KeyError, TypeError, ValueError):
                 raise ApiError(400, "Vorschau ungültig.")

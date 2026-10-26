@@ -3,7 +3,7 @@
 import { neighbours, parseGrid } from './hex.js';
 
 const S = 20, SQ3 = Math.sqrt(3), NS = 'http://www.w3.org/2000/svg';
-let svg, L = {}, H = {}, theme = {}, mapKey = null, polys = {}, vb, full, down = null, hoverKey = null;
+let svg, L = {}, H = {}, theme = {}, mapKey = null, polys = {}, vb, full, down = null, hoverKey = null, rows = [], viewHooks = [];
 
 const mk = (tag, attrs, parent) => {
   const e = document.createElementNS(NS, tag);
@@ -28,7 +28,7 @@ export function init(svgEl, handlers) {
     const m = mk('marker', { id: 'ah' + (err ? 'e' : ''), viewBox: '0 0 10 10', refX: 7, refY: 5, markerWidth: 4, markerHeight: 4, orient: 'auto' }, defs);
     mk('path', { d: 'M0 0L10 5L0 10z', class: 'arrowhead' + (err ? ' err' : '') }, m);
   }
-  for (const n of ['base', 'hi', 'armies', 'orders', 'draft']) L[n] = mk('g', { id: 'l-' + n }, svg);
+  for (const n of ['base', 'reach', 'hi', 'armies', 'orders', 'draft']) L[n] = mk('g', { id: 'l-' + n }, svg);
   svg.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, moved: false }; });
   svg.addEventListener('pointermove', e => {
     if (down && e.buttons) {
@@ -40,19 +40,26 @@ export function init(svgEl, handlers) {
       }
       return;
     }
-    const f = fieldOf(e.target), kk = f ? f.join() : null;
-    if (kk !== hoverKey) { hoverKey = kk; if (H.onHover) H.onHover(f); }
+    const f = fieldAt(e.clientX, e.clientY);
+    hoverKey = f ? f.join() : null;
+    if (H.onHover) H.onHover(f, e);
   });
-  svg.addEventListener('pointerleave', () => { if (hoverKey !== null) { hoverKey = null; if (H.onHover) H.onHover(null); } });
+  svg.addEventListener('pointerleave', () => { hoverKey = null; if (H.onHover) H.onHover(null); });
   svg.addEventListener('click', e => {
     if (down && down.moved) { down = null; return; }
     const m = e.target.closest && e.target.closest('[data-idx]');
     if (m) { if (H.onMarker) H.onMarker(+m.dataset.idx); return; }
-    const f = fieldOf(e.target);
-    if (f && H.onField) H.onField(f);
+    const f = fieldAt(e.clientX, e.clientY);
+    if (f && H.onField) H.onField(f, e);
+  });
+  svg.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (down && down.moved) return;
+    if (H.onContext) H.onContext(fieldAt(e.clientX, e.clientY), e);
   });
   svg.addEventListener('wheel', e => {
     e.preventDefault();
+    if (e.shiftKey) { const d = e.deltaY || e.deltaX; if (d && H.onStep) H.onStep(d < 0 ? 1 : -1); return; }
     const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
     const p = pt.matrixTransform(svg.getScreenCTM().inverse());
     const nw = Math.min(full.w, Math.max(full.w / 10, vb.w * (e.deltaY < 0 ? 0.85 : 1 / 0.85)));
@@ -60,13 +67,31 @@ export function init(svgEl, handlers) {
     vb.x = p.x - (p.x - vb.x) * f; vb.y = p.y - (p.y - vb.y) * f; vb.h *= f; vb.w = nw; applyVb();
   }, { passive: false });
 }
-const fieldOf = t => (t && t.dataset && t.dataset.c !== undefined) ? [+t.dataset.c, +t.dataset.r] : null;
-const applyVb = () => svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+// Field under a screen position: nearest hex centre (independent of what element is on top).
+function fieldAt(cx, cy) {
+  const pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  const c0 = Math.round((p.x - S) / (1.5 * S)), r0 = Math.floor(p.y / (SQ3 * S));
+  let best = null, bd = (S * 1.01) ** 2;
+  for (let c = c0 - 1; c <= c0 + 1; c++) for (let r = r0 - 1; r <= r0 + 1; r++) {
+    if (!rows[r] || !rows[r][c] || rows[r][c] === '..') continue;
+    const q = centre([c, r]), d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
+    if (d < bd) { bd = d; best = [c, r]; }
+  }
+  return best;
+}
+// Position of a field's centre in pixels relative to the map element, and the hex radius in pixels.
+export function fieldToScreen(f) {
+  const { x, y } = centre(f), m = svg.getScreenCTM(), b = svg.getBoundingClientRect();
+  return { x: m.a * x + m.e - b.left, y: m.d * y + m.f - b.top, r: m.a * S };
+}
+export const onViewChange = fn => { viewHooks.push(fn); };
+const applyVb = () => { svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); viewHooks.forEach(fn => fn()); };
 const clear = g => { while (g.firstChild) g.removeChild(g.firstChild); };
 
 function buildBase(state) {
   clear(L.base); polys = {};
-  const grid = parseGrid(state.map.grid), P = state.map.provinces;
+  const grid = rows = parseGrid(state.map.grid), P = state.map.provinces;
   const border = mk('path', { class: 'border', stroke: theme.province_border || '#fff', 'stroke-width': 2 }, null);
   let d = '', maxc = 0, maxr = 0;
   const pb = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
@@ -74,7 +99,7 @@ function buildBase(state) {
     if (tok === '..') return;
     maxc = Math.max(maxc, c); maxr = Math.max(maxr, r);
     const { x, y } = centre([c, r]);
-    const poly = mk('polygon', { points: hexPts(x, y), stroke: theme.hex_outline || '#000', 'stroke-width': 0.5, 'data-c': c, 'data-r': r }, L.base);
+    const poly = mk('polygon', { points: hexPts(x, y), stroke: theme.hex_outline || '#000', 'stroke-width': 0.5 }, L.base);
     if (P[tok]) (polys[tok] = polys[tok] || []).push(poly);
     else poly.setAttribute('fill', ((theme.terrain || {})[tok] || {}).fill || '#444');
     if (!P[tok]) return;
@@ -129,7 +154,7 @@ export function showArrows(orders, errors, state) {
   clear(L.orders);
   let seq = 0; const stack = {};
   const marker = (idx, x, y, s, errs, title) => {
-    const g = mk('g', { class: 'mk' + (errs.length ? ' err' : ''), 'data-idx': idx }, L.orders);
+    const g = mk('g', { class: 'mk' + (errs.length ? ' err' : ''), 'data-idx': idx, 'data-ord': idx }, L.orders);
     const w = s.length * 6 + 8;
     mk('rect', { x: x - w / 2, y: y - 7, width: w, height: 14, rx: 4 }, g);
     txt(g, x, y, s, '');
@@ -142,7 +167,8 @@ export function showArrows(orders, errors, state) {
     const army = o.army && state.armies[o.army];
     if (o.type === 'move' && army) {
       const pts = [army.field, ...o.path].map(centre);
-      mk('polyline', { points: pts.map(p => p.x + ',' + p.y).join(' '), class: 'ord-move' + (errs.length ? ' err' : ''), 'marker-end': `url(#ah${errs.length ? 'e' : ''})` }, L.orders);
+      const ps = pts.map(p => p.x + ',' + p.y).join(' ');
+      mk('polyline', { points: ps, class: 'ord-move' + (errs.length ? ' err' : ''), 'data-ord': i, 'marker-end': `url(#ah${errs.length ? 'e' : ''})` }, L.orders);
       const a = pts[0], b = pts[1] || pts[0];
       marker(i, (a.x + b.x) / 2, (a.y + b.y) / 2, String(++seq), errs, `Zug ${seq}: ${o.count} Div.`);
     } else if (o.type === 'recruit') {
@@ -158,7 +184,22 @@ export function showArrows(orders, errors, state) {
   });
 }
 
-// Unconfirmed path while entering a move. fields = [start, ...path] or null; ok=false draws red.
+// Reachable fields as a subtle overlay. cells = [[field, kind]], kind 'go' | 'attack'. Empty/null clears it.
+export function setReach(cells) {
+  clear(L.reach);
+  svg.classList.toggle('picking', !!(cells && cells.length));
+  for (const [f, kind] of cells || []) {
+    const { x, y } = centre(f);
+    mk('polygon', { points: hexPts(x, y), class: 'reach ' + kind }, L.reach);
+  }
+}
+// Emphasise the map elements of order i (order list hover); null = none.
+export function focusOrder(i) {
+  L.orders.querySelectorAll('.focus').forEach(e => e.classList.remove('focus'));
+  if (i != null) L.orders.querySelectorAll(`[data-ord="${i}"]`).forEach(e => e.classList.add('focus'));
+}
+
+// Path preview under the cursor / while collecting waypoints. fields = [start, ...path] or null; ok=false draws red.
 export function showDraft(fields, ok = true, waypoints = []) {
   clear(L.draft);
   if (!fields || fields.length < 2) return;

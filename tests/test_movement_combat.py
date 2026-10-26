@@ -81,11 +81,11 @@ def test_path_errors():
     assert errors_of(state, "AA", {"type": "dance"})[0]
 
 
-def test_cannot_order_foreign_army_and_one_move_per_army():
+def test_cannot_order_foreign_army_or_move_more_than_movable():
     state = make_game()
     put(state, "AA", A1_CAP, 3)
     assert errors_of(state, "BB", move("a1", 3, A1_MID))[0]
-    two = errors_of(state, "AA", move("a1", 1, A1_MID), move("a1", 1, A1_MID))
+    two = errors_of(state, "AA", move("a1", 2, A1_MID), move("a1", 2, A1_MID))
     assert two[0] == [] and two[1]
 
 
@@ -103,6 +103,27 @@ def test_split_inherits_forced_march():
     assert state.armies["a1"]["divisions"] == 3 and state.armies["a1"]["field"] == A1_CAP
     new = state.armies["a2"]
     assert new["divisions"] == 2 and new["field"] == A2_CAP and new["forced_march"] is True
+
+
+def test_army_splits_in_several_directions():
+    """G56: several moves per army, as long as the total stays within its movable divisions."""
+    state = make_game()
+    put(state, "AA", A1_MID, 5)
+    orders = [move("a1", 2, A1_CAP), move("a1", 3, A2_CAP)]
+    assert engine.validate_orders(state, "AA", orders) == [[], []]
+    engine.resolve_turn(state, {"AA": orders})
+    assert state.army_at(A1_CAP)["divisions"] == 2
+    assert state.army_at(A2_CAP)["divisions"] == 3 and state.army_at(A2_CAP)["id"] == "a1"
+    assert state.army_at(A1_MID) is None
+
+
+def test_moves_of_one_army_cannot_exceed_its_divisions():
+    state = make_game()
+    put(state, "AA", A1_MID, 5)
+    errors = engine.validate_orders(state, "AA", [move("a1", 3, A1_CAP), move("a1", 3, A2_CAP),
+                                                  move("a1", 2, A2_CAP), move("a1", 1, A1_CAP)])
+    assert errors[0] == [] and errors[1] == ["Nur noch 2 Divisionen können ziehen."]
+    assert errors[2] == [] and errors[3] == ["Alle Divisionen der Armee haben schon einen Zugbefehl."]
 
 
 def test_split_without_forced_march():
@@ -393,6 +414,16 @@ def test_preview_move_with_fight_and_conquest():
     assert result["conquest"] == {"province": "B1", "cost": 2, "possible": True}
     assert "Kampf gegen Bland" in result["text"] and "Eroberung kostet 2 Divisionen" in result["text"]
     assert state.armies["a1"]["divisions"] == 6  # nothing changed
+
+
+def test_preview_uses_pending_forced_march():
+    state = make_game()
+    put(state, "AA", N1_CAP, 6)
+    put(state, "BB", B1_CAP, 2)
+    result = engine.preview_move(state, "AA", "a1", 6, [B1_CAP], forced_march=True)
+    # strength 6 x 0.5 = 3 beats 2; the winner loses 2 / 0.5 = 4
+    assert result["fight"] == {"defender": "BB", "attacker_losses": 4, "defender_losses": 2, "winner": "AA"}
+    assert state.armies["a1"]["forced_march"] is False  # nothing changed
 
 
 def test_preview_move_invalid_and_plain():

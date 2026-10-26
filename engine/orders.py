@@ -22,7 +22,7 @@ class Pending:
     def __init__(self):
         self.spent = 0          # gold for recruits and sent gold
         self.recruited = 0      # divisions ordered
-        self.moved = set()      # armies with a move order
+        self.moved = {}         # army id -> divisions already ordered to move
         self.toggles = {}       # army id -> forced march after this turn's toggle orders
         self.given = set()      # provinces already offered as gift
 
@@ -300,18 +300,22 @@ class Move(Order):
         army = own_army(state, player, self.data["army"])
         if not army:
             return ["Armee gehört dir nicht."]
-        if army["id"] in pending.moved:
-            return ["Armee hat schon einen Zugbefehl."]
         if self.data["count"] <= 0:
             return ["Anzahl muss positiv sein."]
         if self.data["count"] > army["divisions"]:
             return [f"Armee hat nur {plural(army['divisions'], 'Division', 'Divisionen')}."]
         if state.movable(army) <= 0:
             return ["Neu rekrutierte Divisionen können nicht ziehen."]
+        left = state.movable(army) - pending.moved.get(army["id"], 0)   # several moves split the army (G56)
+        if left <= 0:
+            return ["Alle Divisionen der Armee haben schon einen Zugbefehl."]
+        if self.data["count"] > left:
+            return [f"Nur noch {plural(left, 'Division kann', 'Divisionen können')} ziehen."]
         return path_errors(state, army, self.data["path"], pending)
 
     def reserve(self, state, pending):
-        pending.moved.add(self.data["army"])
+        army_id = self.data["army"]
+        pending.moved[army_id] = pending.moved.get(army_id, 0) + self.data["count"]
 
     def resolution_errors(self, state, player):
         """Fewer divisions than ordered is fine: all remaining (movable) ones move."""

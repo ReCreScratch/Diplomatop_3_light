@@ -63,7 +63,9 @@ Rule details beyond RULES.md (*[default]*):
 - Conquest is attempted on the field where the move **ends** (path end or fight stop) if it is the capital of a
   province not owned by the mover. Capitals passed mid-path are not conquered. Failed conquest → army goes back to
   the field before the capital.
-- A unit may only receive one `move` per army id per turn; split-off armies cannot get further orders this turn.
+- Several `move` orders for the same army are allowed; their counts together must not exceed its movable divisions.
+  Each one splits off its divisions (the last one taking the rest moves the army itself, keeping its id).
+  Split-off armies cannot get further orders this turn.
 
 ## 5. Events (returned by `resolve_turn`, shown in the replay)
 Each event: `{"kind": ..., "player": pid|null, "text": "German one-liner", ...extra}`. Kinds and extras:
@@ -93,13 +95,13 @@ Based on the current board (ignores other orders).
 |---|---|
 | `GET /api/maps` | → `["europa", ...]` (folders in `maps/`) |
 | `POST /api/games` | `{map, rules?: {}}` → `{game_id, host_token}` |
-| `GET /api/games/{gid}/lobby?token=` | → `{game_id, map, status: "lobby"/"running", nations: {code: name}, joined: {code: player_name}, me: code\|null, is_host: bool}` (token optional) |
+| `GET /api/games/{gid}/lobby?token=` | → `{game_id, map, status: "lobby"/"running", nations: {code: name}, joined: {code: player_name}, me: code\|null, is_host: bool, host: code\|null, rules: {merged rules}}` (token optional) |
 | `POST /api/games/{gid}/join` | `{name, nation, host_token?}` → `{token}`. Passing host_token marks this player as host. |
 | `POST /api/games/{gid}/start?token=` | host only, ≥1 player → `{ok: true}` |
 | `GET /api/games/{gid}/state?token=&since=N` | → `{changed: false}` if `version == N`, else the view below |
 | `PUT /api/games/{gid}/orders?token=` | `{orders: [...]}` replaces own list → `{errors: [[...], ...]}` |
 | `POST /api/games/{gid}/ready?token=` | `{ready: bool}` → `{ok: true}` |
-| `POST /api/games/{gid}/preview?token=` | `{army, count, path}` → preview_move result |
+| `POST /api/games/{gid}/preview?token=` | `{army, count, path, forced_march?}` (setting after pending toggle) → preview_move result |
 
 State view:
 ```json

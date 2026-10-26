@@ -20,13 +20,19 @@ def first_enemy(state, player, path):
     return None, None
 
 
-def preview_move(state, player, army_id, count, path):
-    """What a move would do on the current board (other orders ignored)."""
+def preview_move(state, player, army_id, count, path, forced_march=None):
+    """What a move would do on the current board (other orders ignored).
+    forced_march: the army's setting after this turn's pending toggle (None = current setting)."""
     order = Move({"type": "move", "army": army_id, "count": count, "path": path})
-    errors = order.validate(state, player, Pending())
+    pending = Pending()
+    if forced_march is not None:
+        pending.toggles[army_id] = bool(forced_march)
+    errors = order.validate(state, player, pending)
     if errors:
         return empty_preview(errors)
     army = state.armies[army_id]
+    if forced_march is not None:
+        army = {**army, "forced_march": bool(forced_march)}
     count = min(count, state.movable(army))
     index, enemy = first_enemy(state, player, path)
     end = path[index] if enemy else path[-1]

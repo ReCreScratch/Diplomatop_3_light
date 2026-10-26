@@ -113,7 +113,8 @@ Gold received during resolution (transfers, disband refunds) can be spent in the
 - Allied armies never fight (alliances: later milestone).
 - When armies merge, the army that was already standing there keeps its forced-march setting *[default, G54]*.
 - Land armies move only over land fields with a province; sea and blocked land are impassable in milestone 1 *[default, G55]*.
-- Each army gets at most one move order per turn; a part split off cannot get further orders that turn *[default, G56]*.
+- An army can get several move orders per turn, each one splitting off its divisions, as long as together they use
+  at most its movable divisions. A part split off cannot get further orders that turn *[decided, G56]*.
 
 ## 6. Combat
 - Basic rule: **1 division kills 1 division**, no defender advantage.
@@ -211,8 +212,8 @@ one per player, anyone can end it), idle warning, surrender/spectator, kick. Sav
 ## 14. Open questions
 
 **Milestone 1:** no open rule questions left (G50–G53 decided, see sections 4, 5 and 9).
-G54–G57 (merge flag, impassable sea, one move per army, conquest only at move end) are defaults set during
-implementation – object if they feel wrong.
+G54, G55, G57 (merge flag, impassable sea, conquest only at move end) are defaults set during implementation –
+object if they feel wrong. G56 (several moves per army) is decided.
 
 **Europa map** (`maps/europa/`, see IMPLEMENTATION.md section 4.3):
 | ID | Question | Current state |
