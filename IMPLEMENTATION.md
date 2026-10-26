@@ -87,17 +87,26 @@ happens on the map with as few clicks as possible.
 
 **Interaction model (revised after the first playtest).** Everything happens on the map; there is no side panel
 for actions. Nothing illegal can be entered.
-- **Selection:** left-click an own army or own capital selects it (pulsing outline). Esc, right-click on an
-  empty field or a click on non-reachable sea/void deselects. Tab / Shift+Tab cycles through own armies.
-- **Floating toolbar** (HTML overlay next to the selected field, follows pan/zoom): count stepper `− N +`,
-  buttons "Rekrutieren +N" (R), "Abrüsten N" (D), "Gewaltmarsch an/aus" (G). Buttons that are not possible are
-  disabled with the reason as tooltip (e.g. "Kein Gold mehr"). Hotkeys do the same: +/−, digits, Shift+wheel change N.
-  On a capital without army only the recruit part is shown.
-- **Move:** with an army selected, all fields reachable within its range (including a pending forced-march toggle)
-  are highlighted. Hovering a field draws the shortest path and shows the preview (fight/conquest via `/preview`)
-  in a tooltip at the cursor. **Left-click on a reachable field issues the move immediately** with N divisions
-  (default: all movable). Shift+click adds a waypoint for detours. If divisions remain (split), the army stays
-  selected with N set to the rest, so the next click sends the rest elsewhere (G56: several moves per army).
+- **Selection:** left-click an own army or own capital selects it (pulsing outline). Esc, a click on sea/void
+  (with no waypoints), a click outside map/toolbar/chat/menu closes toolbar and menus and deselects.
+  Tab / Shift+Tab cycles through own armies.
+- **Floating toolbar** (HTML overlay next to the selected field, follows pan/zoom): count control `− N + von M`
+  with quick buttons "1", "½", "Alle", the line "Ohne Befehl: R von M Div.", buttons "Rekrutieren +N" (R),
+  "Abrüsten N" (D), "Gewaltmarsch an/aus" (G) and a short hint. Impossible buttons are disabled with the reason as
+  tooltip. Hotkeys: digits, +/−, Shift+wheel change N. On a capital without army only the recruit part is shown.
+- **Move (route drawing):** with an army selected the route always follows the mouse: shortest passable path
+  (province land, no range limit) from the army, or from the last waypoint, to the cursor field. A click fixes a
+  waypoint; clicking the last waypoint again (or double-click, or Enter) confirms. Backspace / right-click removes
+  the last waypoint, Esc discards the route (a second Esc deselects). The part reachable this turn (move or forced-march
+  range incl. pending toggle) is solid and ends in a flag ring; the rest is faint and dashed. An enemy army on the
+  route inside the range stops the march there (attack style). On confirm the **full route** is sent as `path` (standing march, G58): the engine
+  runs one turn's part per turn and keeps the rest as `army.route`; a toast says "Marsch nach X: ca. N Runden". Own
+  standing routes are drawn as a faint dotted line with a small flag (never other players' routes: the server strips
+  `route` from foreign armies and snapshots) and listed in the order list as "Marsch: N Div. → Ziel (noch ~R Runden)";
+  its ✕, the toolbar button "Halt" and key H send a `halt` order. A new route for the army replaces the old one. The cursor tooltip shows the fight/conquest
+  preview (`/preview`) for the this-turn part. The reach overlay is only informational.
+- **Splitting:** after a confirmed move the army stays selected with N = the divisions without order, so the next
+  route sends the rest (or part of it) elsewhere – any number of splits (G56).
 - **Default N:** all movable divisions for moves/disband, 1 for recruiting; clamped to what is possible.
 - **Prevention:** a client `budget()` computes gold left (gold − recruits × cost − gold sent) and recruits left
   (`my_recruit_limit` − pending recruits); all counts are clamped to it. If the server still returns an error for
@@ -106,7 +115,7 @@ for actions. Nothing illegal can be entered.
 - **Delete / undo:** clicking an order's marker (the numbered badge on an arrow, "+3", "−2") deletes that order
   (arrows themselves are not clickable, so clicks on fields under them still work); Ctrl+Z undoes the
   last change. A compact order list in the side area (hover = highlight on map, ✕ = delete) reaches hidden markers.
-- **Feedback:** context hint line below the map ("Ziel anklicken · Shift+Klick Umweg · G Gewaltmarsch · Esc"),
+- **Feedback:** context hint line below the map ("Felder anklicken für den Weg · G Gewaltmarsch · Esc"),
   cursor tooltip, top bar "Gold 33 → 18", "Rekruten 4/27"; next to Ready an info "2 Armeen ohne Befehl" (no dialog).
 - **Transfers:** clicking a board row opens an inline gold field in that row (max = gold left, Enter sends).
   Right-click on an own province opens a small on-map menu "Provinz verschenken an …" – the only menu.

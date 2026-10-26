@@ -54,6 +54,8 @@ def test_flow(tmp_path):
     after = c.get(f"/api/games/{gid}/state", params={"token": t1}).json()
     assert after["turn"] == 2 and after["version"] > mid["version"]
     assert after["last_turn"]["turn"] == 1 and after["last_turn"]["events"]
+    before = after["last_turn"]["before"]
+    assert set(before) == {"armies", "owners"} and before["owners"]
     assert after["ready"] == {"GB": False, "FR": False} and after["my_orders"] == []
 
 

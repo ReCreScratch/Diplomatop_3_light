@@ -1,22 +1,22 @@
-// Map interaction: selection, floating toolbar, reach highlight, one-click moves, hotkeys, context menu, tooltip.
+// Map interaction: selection, floating toolbar, route drawing (waypoints, range split), hotkeys, context menu, tooltip.
 import * as R from './render.js';
 import * as O from './orders.js';
 import * as Chat from './chat.js';
 import { api } from './api.js';
 import { neighbours, key } from './hex.js';
-import { $, esc, same, ctx, rules, P, tokenAt, passable, armyAt, ownArmyAt, isEnemyAt, ownCapitalAt, nName, pName } from './ctx.js';
+import { $, esc, same, ctx, rules, P, tokenAt, passable, armyAt, ownArmyAt, isEnemyAt, ownCapitalAt, nName, pName, fieldName } from './ctx.js';
 
 let hooks = { toast() {}, onEscape() {} };
 let sel = null;            // { f: field, n: count }
-let draft = null;          // { wps: [waypoints], path: [fields so far] } while Shift+click collects detours
-let reach = null;          // { origin, prev: Map(key -> field), kind: Map(key -> 'go'|'attack') }
+let wps = [];              // fixed waypoints of the route being drawn (the last leg follows the mouse)
+let reach = null;          // { kind: Map(key -> 'go'|'attack') } fields reachable this turn (informational overlay)
 let hoverF = null, mouse = null;
 let pv = new Map(), pvTimer = null, digitAt = 0;
 
 export function init(h) {
   hooks = h;
   R.init($('map'), { onField, onHover, onMarker: i => O.removeAt(i), onContext, onStep: step });
-  R.onViewChange(() => { place(); hideMenu(); });
+  R.onViewChange(() => hideMenu());
   $('toolbar').onclick = e => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) act(b.dataset.act); };
   $('ctxmenu').onclick = e => {
     const w = e.target.closest('[data-msg]');
@@ -24,7 +24,11 @@ export function init(h) {
     const b = e.target.closest('[data-to]'); if (!b) return;
     O.add({ type: 'give_province', province: b.dataset.prov, to: b.dataset.to }); hideMenu();
   };
-  document.addEventListener('click', e => { if (!e.target.closest('#ctxmenu')) hideMenu(); });
+  document.addEventListener('click', e => {   // composedPath: the target may already be gone after a re-render
+    const ids = (e.composedPath ? e.composedPath() : []).map(n => n.id);
+    if (!ids.includes('ctxmenu')) hideMenu();
+    if (sel && !['map', 'toolbar', 'chat', 'ctxmenu'].some(i => ids.includes(i))) select(null);   // click outside = deselect
+  });
   document.addEventListener('keydown', onKey);
 }
 
@@ -39,17 +43,18 @@ function nMax() {
 const clampN = () => { if (sel) sel.n = Math.max(1, Math.min(sel.n, nMax())); };
 
 function select(f) {
-  sel = f ? { f, n: 1 } : null; draft = null;
+  sel = f ? { f, n: 1 } : null; wps = [];
   if (sel) sel.n = defaultN();
   R.clearHighlight('sel'); if (sel) R.highlight([f], 'sel');
   update();
 }
 export const hasSelection = () => !!sel;
-export function reset() { sel = null; draft = null; pv.clear(); hideMenu(); R.clearHighlight('sel'); update(); }
+export function reset() { sel = null; wps = []; pv.clear(); hideMenu(); R.clearHighlight('sel'); update(); }
 
 // Called after new server state or a changed order list.
 export function update() {
-  if (sel && !(selArmy() || ownCapitalAt(sel.f))) { sel = null; draft = null; R.clearHighlight('sel'); }
+  if (sel && !(selArmy() || ownCapitalAt(sel.f))) { sel = null; R.clearHighlight('sel'); }
+  if (!sel || !selArmy() || O.movableLeft(selArmy()) < 1) wps = [];
   clampN(); computeReach(); renderToolbar(); hint();
   if (hoverF) onHover(hoverF, null); else hideTip();
 }
@@ -62,56 +67,112 @@ function cycle(dir) {
   select(own[(i + dir + own.length) % own.length].field);
 }
 
-// ---------- reach ----------
+// ---------- reach (informational overlay) ----------
 function computeReach() {
   reach = null;
   const a = selArmy();
   if (a && O.movableLeft(a) > 0) {
-    const origin = draft && draft.wps.length ? draft.wps[draft.wps.length - 1] : a.field;
-    const maxD = O.rangeOf(a) - (draft ? draft.path.length : 0);
-    const dist = new Map([[key(origin), 0]]), prev = new Map(), kind = new Map();
+    const origin = a.field, maxD = O.rangeOf(a);
+    const dist = new Map([[key(origin), 0]]), kind = new Map();
     let q = [origin];
     for (let d = 0; d < maxD; d++) {
       const nq = [];
       for (const f of q) for (const n of neighbours(f[0], f[1])) {
         const k = key(n);
         if (dist.has(k) || !passable(n)) continue;
-        dist.set(k, d + 1); prev.set(k, f);
+        dist.set(k, d + 1);
         if (isEnemyAt(n)) kind.set(k, 'attack'); else { kind.set(k, 'go'); nq.push(n); }  // enemy armies stop movement
       }
       q = nq;
     }
     kind.delete(key(a.field));
-    reach = { origin, prev, kind };
+    reach = { kind };
   }
   R.setReach(reach ? [...reach.kind].map(([k, v]) => [k.split(',').map(Number), v]) : []);
 }
-function pathTo(f) {   // full path from the army's field (incl. collected waypoints) to f
-  const seg = []; let c = f;
-  while (c && !same(c, reach.origin)) { seg.unshift(c); c = reach.prev.get(key(c)); }
-  return (draft ? draft.path : []).concat(seg);
+
+// ---------- route ----------
+// Shortest passable leg (no range limit); enemy armies are only entered when they are the goal, if there is a way around.
+function leg(from, to) {
+  for (const avoid of [true, false]) {
+    const prev = new Map([[key(from), null]]);
+    let q = [from];
+    while (q.length && !prev.has(key(to))) {
+      const nq = [];
+      for (const f of q) for (const n of neighbours(f[0], f[1])) {
+        const k = key(n);
+        if (prev.has(k) || !passable(n) || (avoid && isEnemyAt(n) && !same(n, to))) continue;
+        prev.set(k, f); nq.push(n);
+      }
+      q = nq;
+    }
+    if (prev.has(key(to))) {
+      const out = []; let c = to;
+      while (c && !same(c, from)) { out.unshift(c); c = prev.get(key(c)); }
+      return out;
+    }
+  }
+  return null;
 }
-const reachable = f => !!reach && reach.kind.has(key(f));
+// Route from the army over the fixed waypoints to the cursor; near = the part reachable this turn.
+function buildRoute(cursor) {
+  const a = selArmy(); if (!a) return null;
+  const pts = [a.field, ...wps];
+  if (cursor && !same(cursor, pts[pts.length - 1])) pts.push(cursor);
+  const full = [];
+  for (let i = 1; i < pts.length; i++) { const l = leg(pts[i - 1], pts[i]); if (!l) return null; full.push(...l); }
+  if (!full.length) return null;
+  let stop = Math.min(full.length, O.rangeOf(a)), attack = false;
+  for (let i = 0; i < stop; i++) if (isEnemyAt(full[i])) { stop = i + 1; attack = true; break; }
+  return { a, full, near: full.slice(0, stop), far: full.slice(stop - 1), attack };
+}
+function drawRoute(rt) {
+  if (!rt) { R.showRoute(null); return; }
+  R.showRoute([rt.a.field, ...rt.near], rt.far.length > 1 ? rt.far : [], wps, rt.near[rt.near.length - 1], rt.attack);
+}
+const routing = () => { const a = selArmy(); return !!a && O.movableLeft(a) > 0; };
+function addWp(f) {
+  if (same(f, selArmy().field)) return;
+  if (!buildRoute(f)) { hooks.toast('Kein Weg dorthin.'); return; }
+  wps.push(f); update();
+}
+// The ONE place that turns a drawn route into a move order: the full route (standing march, G58);
+// the server executes one turn's part per turn and keeps the rest.
+function routeToOrder(a, count, rt) {
+  return { type: 'move', army: a.id, count, path: rt.full };
+}
+function confirmRoute(cursor) {
+  const a = selArmy(), rt = a && buildRoute(cursor);
+  if (!rt) return;
+  const k = Math.min(sel.n, O.movableLeft(a));
+  if (k < 1) { hooks.toast('Alle Divisionen dieser Armee haben schon einen Zugbefehl.'); return; }
+  const o = routeToOrder(a, k, rt);
+  if (rt.near.length < rt.full.length) {
+    hooks.toast(`Marsch nach ${fieldName(rt.full[rt.full.length - 1])}: ca. ${Math.ceil(rt.full.length / O.rangeOf(a))} Runden`);
+  }
+  wps = []; R.showRoute(null);
+  O.add(o);                       // a further move splits the army more (G56)
+  sel.n = O.movableLeft(a);       // the next route sends the rest
+  update();
+}
 
 // ---------- clicks ----------
 function onField(f, e) {
   hideMenu();
   if (!ctx.G.me) return;
   if ((e && e.altKey) || Chat.pinning()) { Chat.toggleMark(f); return; }   // chat reference instead of orders
-  if (reachable(f)) {
-    const path = pathTo(f);
-    if (e && e.shiftKey && reach.kind.get(key(f)) === 'go') {   // detour waypoint
-      draft = { wps: [...(draft ? draft.wps : []), f], path };
-      update();
-    } else doMove(path);
+  if (routing() && wps.length) {            // a route is under construction: clicks set waypoints
+    if (same(f, wps[wps.length - 1])) confirmRoute(null); else if (passable(f)) addWp(f); else hooks.toast('Nicht passierbar.');
     return;
   }
   if (ownArmyAt(f) || ownCapitalAt(f)) { if (!sel || !same(sel.f, f)) select(f); return; }
-  if (sel && passable(f)) { hooks.toast(selArmy() ? 'Außer Reichweite.' : 'Hier kann nichts angeordnet werden.'); return; }
+  if (routing() && passable(f)) { addWp(f); return; }
+  if (sel && passable(f) && selArmy()) { hooks.toast('Alle Divisionen dieser Armee haben schon einen Zugbefehl.'); return; }
   select(null);
 }
 function onContext(f) {
   hideMenu();
+  if (wps.length) { wps.pop(); update(); return; }   // right-click takes the last waypoint back
   const tok = f && tokenAt(f), prov = tok && P()[tok], others = Object.keys(ctx.G.players).filter(p => p !== ctx.G.me);
   const give = prov && ctx.G.owners[tok] === ctx.G.me && others.length && !O.gifted(tok);
   const a = f && armyAt(f), talk = f ? [...new Set([prov && ctx.G.owners[tok], a && a.owner])].filter(p => p && p !== ctx.G.me && ctx.G.players[p]) : [];
@@ -127,14 +188,6 @@ function onContext(f) {
 const hideMenu = () => { $('ctxmenu').hidden = true; };
 
 // ---------- actions ----------
-function doMove(path) {
-  const a = selArmy(), k = Math.min(sel.n, O.movableLeft(a));
-  if (k < 1) { hooks.toast('Alle Divisionen dieser Armee haben schon einen Zugbefehl.'); return; }
-  draft = null; R.showDraft(null);
-  O.add({ type: 'move', army: a.id, count: k, path });   // a second move splits the army further
-  sel.n = O.movableLeft(a);                              // next click sends the rest
-  update();
-}
 function doRecruit() {
   if (!canRecruitHere()) return;
   const b = O.budget(), k = Math.min(sel.n, b.canRecruit);
@@ -149,9 +202,14 @@ function doDisband() {
 }
 function doForcedMarch() {
   const a = selArmy(); if (!a) return;
-  draft = null; O.setForcedMarch(a, !O.fmOn(a));
+  O.setForcedMarch(a, !O.fmOn(a));
 }
-const act = name => ({ dec: () => step(-1), inc: () => step(1), rec: doRecruit, dis: doDisband, fm: doForcedMarch })[name]();
+function doHalt() {
+  const a = selArmy();
+  if (a && O.marching(a)) O.add({ type: 'halt', army: a.id });
+}
+const baseN = () => { const a = selArmy(); return a ? Math.max(1, O.movableLeft(a)) : nMax(); };
+const act = name => ({ dec: () => step(-1), inc: () => step(1), q1: () => setN(1), qh: () => setN(Math.max(1, Math.floor(baseN() / 2))), qa: () => setN(baseN()), rec: doRecruit, dis: doDisband, fm: doForcedMarch, halt: doHalt })[name]();
 function setN(v) { if (sel) { sel.n = Math.max(1, Math.min(nMax(), v)); renderToolbar(); if (hoverF) onHover(hoverF, null); } }
 function step(d) { if (sel) setN(sel.n + d); }
 const recruitReason = b => b.recLeft < 1 ? 'Rekrutierungslimit erreicht.' : 'Kein Gold mehr.';
@@ -165,10 +223,12 @@ function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (k === 'Tab') { e.preventDefault(); cycle(e.shiftKey ? -1 : 1); }
   else if (k === 'Escape') {
-    if (Chat.cancelPin()) { /* pin mode off */ } else if (draft) { draft = null; update(); } else if (sel) select(null); else hooks.onEscape();
+    if (Chat.cancelPin()) { /* pin mode off */ } else if (wps.length) { wps = []; update(); } else if (sel) select(null); else hooks.onEscape();
     hideMenu();
   } else if (k === 'Enter' && !sel && e.target === document.body) { e.preventDefault(); Chat.focusInput(); }
   else if (!sel) return;
+  else if (k === 'Backspace') { if (wps.length) { e.preventDefault(); wps.pop(); update(); } }
+  else if (k === 'Enter') { if (routing() && e.target.tagName !== 'BUTTON') { e.preventDefault(); confirmRoute(hoverF && passable(hoverF) ? hoverF : null); } }
   else if (k === '+' || k === '=') step(1);
   else if (k === '-') step(-1);
   else if (/^[0-9]$/.test(k)) {   // a second digit within 0.7 s makes a two-digit number
@@ -178,52 +238,51 @@ function onKey(e) {
   else if (k === 'r' || k === 'R') doRecruit();
   else if (k === 'd' || k === 'D') doDisband();
   else if (k === 'g' || k === 'G') doForcedMarch();
+  else if (k === 'h' || k === 'H') doHalt();
 }
 
 // ---------- toolbar ----------
 function renderToolbar() {
   const tb = $('toolbar');
   if (!sel) { tb.hidden = true; tb.innerHTML = ''; return; }
-  const a = selArmy(), b = O.budget(), mx = nMax();
+  const a = selArmy(), b = O.budget(), mx = nMax(), base = baseN(), left = a ? O.movableLeft(a) : 0;
   const btn = (name, label, hot, ok, why) => `<button data-act="${name}" ${ok ? '' : 'disabled'} title="${esc(ok ? '' : why)}">${label} <kbd>${hot}</kbd></button>`;
-  let h = `<span class="tb-step"><button data-act="dec" ${sel.n > 1 ? '' : 'disabled'}>−</button><b>${sel.n}</b>` +
-    `<button data-act="inc" ${sel.n < mx ? '' : 'disabled'}>+</button></span>`;
-  if (canRecruitHere()) h += btn('rec', `Rekrutieren +${Math.max(1, Math.min(sel.n, b.canRecruit))}`, 'R', b.canRecruit > 0, recruitReason(b));
+  let h = '';
+  if (a) h += `<div class="tb-row"><span class="tb-info">Armee ${esc(a.id)}: ${a.divisions} Div.${a.fresh ? ` (${a.fresh} neu)` : ''}${a.route ? ` · marschiert nach ${esc(fieldName(a.route[a.route.length - 1]))}` : ''}</span></div>`;
+  h += `<div class="tb-row"><span class="tb-step"><button data-act="dec" ${sel.n > 1 ? '' : 'disabled'}>−</button><b>${sel.n}</b>` +
+    `<button data-act="inc" ${sel.n < mx ? '' : 'disabled'}>+</button></span><span class="tb-von">von ${base}</span>` +
+    `<button data-act="q1" title="Eine Division">1</button><button data-act="qh" title="Die Hälfte">½</button><button data-act="qa" title="Alle">Alle</button></div>`;
+  if (a) h += `<div class="tb-row tb-rest ${left ? '' : 'done'}">Ohne Befehl: <b>${left}</b> von ${a.divisions} Div.</div>`;
+  let row = '';
+  if (canRecruitHere()) row += btn('rec', `Rekrutieren +${Math.max(1, Math.min(sel.n, b.canRecruit))}`, 'R', b.canRecruit > 0, recruitReason(b));
   if (a) {
     const dm = O.disbandMax(a);
-    h += btn('dis', `Abrüsten ${Math.max(1, Math.min(sel.n, dm))}`, 'D', dm > 0, disbandReason(a));
-    h += btn('fm', `Gewaltmarsch ${O.fmOn(a) ? 'aus' : 'an'}`, 'G', true, '');
-    h = `<span class="tb-info">Armee ${esc(a.id)}: ${a.divisions} Div.${a.fresh ? ` (${a.fresh} neu)` : ''}</span>` + h;
+    row += btn('dis', `Abrüsten ${Math.max(1, Math.min(sel.n, dm))}`, 'D', dm > 0, disbandReason(a));
+    row += btn('fm', `Gewaltmarsch ${O.fmOn(a) ? 'aus' : 'an'}`, 'G', true, '');
+    if (O.marching(a)) row += btn('halt', 'Halt', 'H', true, '');
   }
-  tb.innerHTML = h; tb.hidden = false; place();
+  if (row) h += `<div class="tb-row">${row}</div>`;
+  if (left) h += '<div class="tb-help">Anzahl wählen · Felder anklicken für den Weg · gleiches Feld nochmal = bestätigen</div>';
+  tb.innerHTML = h; tb.hidden = false;
 }
-function place() {
-  const tb = $('toolbar');
-  if (!sel || tb.hidden) return;
-  // centred under the selection and below the whole reach area (above it if there is no room),
-  // so the toolbar never covers a possible move target
-  const s = R.fieldToScreen(sel.f), W = $('map').clientWidth, H = $('map').clientHeight;
-  const w = tb.offsetWidth, h = tb.offsetHeight;
-  const ys = [s.y, ...(reach ? [...reach.kind.keys()].map(k => R.fieldToScreen(k.split(',').map(Number)).y) : [])];
-  let y = Math.max(...ys) + s.r + 6;
-  if (y + h > H) y = Math.min(...ys) - s.r - 6 - h;
-  const x = Math.min(Math.max(0, s.x - w / 2), Math.max(0, W - w));
-  tb.style.left = x + 'px'; tb.style.top = Math.min(Math.max(0, y), Math.max(0, H - h)) + 'px';
-}
+
 
 // ---------- hover, tooltip, hint ----------
 function hideTip() {
   $('tip').hidden = true;
-  R.showDraft(draft && draft.path.length ? [selArmy().field, ...draft.path] : null, true, draft ? draft.wps : []);
+  drawRoute(routing() && wps.length ? buildRoute(null) : null);
 }
 function onHover(f, e) {
   hoverF = f;
   if (e) mouse = { x: e.clientX, y: e.clientY };
   $('ib-hover').textContent = f ? fieldInfo(f) : '';
-  if (!f || !reachable(f)) { hideTip(); return; }
-  const a = selArmy(), path = pathTo(f), n = Math.min(sel.n, O.movableLeft(a));
-  R.showDraft([a.field, ...path], true, draft ? draft.wps : []);
-  const fm = O.fmOn(a), k = JSON.stringify([a.id, n, path, fm]), base = `${path.length} ${path.length === 1 ? 'Feld' : 'Felder'}`;
+  const rt = f && routing() && passable(f) ? buildRoute(f) : null;
+  if (!rt) { hideTip(); return; }
+  drawRoute(rt);
+  const a = rt.a, n = Math.min(sel.n, O.movableLeft(a)), path = rt.near, fm = O.fmOn(a);
+  const k = JSON.stringify([a.id, n, path, fm]), cnt = x => `${x} ${x === 1 ? 'Feld' : 'Felder'}`;
+  const base = cnt(rt.full.length) + (path.length < rt.full.length ? ` (diese Runde ${path.length})` : '') +
+    (wps.length && same(f, wps[wps.length - 1]) ? ' · nochmal klicken = bestätigen' : '');
   moveTip(base, '');
   if (pv.has(k)) { showPreview(pv.get(k), base); return; }
   clearTimeout(pvTimer);
@@ -231,7 +290,8 @@ function onHover(f, e) {
     try {
       const r = await api.preview(ctx.gid, ctx.token, { army: a.id, count: n, path, forced_march: fm });
       pv.set(k, r);
-      if (hoverF && reachable(hoverF) && JSON.stringify([a.id, n, pathTo(hoverF), fm]) === k) showPreview(r, base);
+      const cur = hoverF && routing() && passable(hoverF) ? buildRoute(hoverF) : null;
+      if (cur && JSON.stringify([a.id, n, cur.near, fm]) === k) showPreview(r, base);
     } catch (err) { /* tooltip only */ }
   }, 250);
 }
@@ -247,7 +307,8 @@ function moveTip(text, cls) {
 function hint() {
   const a = sel && selArmy();
   $('ib-hint').textContent = !sel ? 'Eigene Armee oder Hauptstadt anklicken · Tab: nächste Armee · Strg+Z: rückgängig'
-    : a ? (reach ? 'Ziel anklicken · Shift+Klick Umweg · G Gewaltmarsch · +/− Anzahl · Esc' : 'Keine beweglichen Divisionen · R rekrutieren · D abrüsten · Esc')
+    : a ? (reach ? (wps.length ? 'Weiter klicken · letztes Feld nochmal oder Enter = bestätigen · Rücktaste/Rechtsklick: Wegpunkt zurück · Esc: Weg verwerfen'
+        : 'Felder anklicken für den Weg · G Gewaltmarsch · +/− Anzahl · Esc') : 'Keine beweglichen Divisionen · R rekrutieren · D abrüsten · Esc')
       : 'R rekrutieren · +/− Anzahl · Esc';
 }
 function fieldInfo(f) {

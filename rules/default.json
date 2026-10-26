@@ -8,6 +8,7 @@
   "recruit_limit_per_province": 3,
   "recruits_can_move_same_turn": false,
   "move_range": 1,
+  "standing_marches": true,
   "forced_march_range": 3,
   "forced_march_combat_value": 0.5,
   "strength_rounding": "down",

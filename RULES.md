@@ -111,6 +111,16 @@ Gold received during resolution (transfers, disband refunds) can be spent in the
 - Walking through own fields, neutral fields and enemy provinces is allowed *[decided, G12]*.
 - Entering a field with an **enemy army** starts a fight. The moving army stops there, even if it had range left *[decided, G14]*.
 - Allied armies never fight (alliances: later milestone).
+- **Standing march orders** *[decided, G58]*: a move order may name a destination beyond the range. The army moves
+  as far as it can each turn and keeps the rest of the route as a standing order, which runs automatically in later
+  turns (in the owner's slot of the player order, before that player's new orders) until the destination is reached.
+  Setting: `standing_marches` (on). Defaults for the details *[default]*:
+  - A new move order for the army replaces its route; the player can also cancel it ("Halt").
+  - The route ends when the army fights, when a conquest is attempted (success or failure), or when it merges
+    with another own army at the end of a turn's segment.
+  - A part split off with a long route takes that route; the rest keeps its own (if any).
+  - Each turn's segment follows the normal rules (range incl. forced march, fights stop it, conquest only where the
+    segment ends).
 - When armies merge, the army that was already standing there keeps its forced-march setting *[default, G54]*.
 - Land armies move only over land fields with a province; sea and blocked land are impassable in milestone 1 *[default, G55]*.
 - An army can get several move orders per turn, each one splitting off its divisions, as long as together they use
@@ -191,6 +201,7 @@ one per player, anyone can end it), idle warning, surrender/spectator, kick. Sav
 | `recruit_limit_per_province` | 3 | divisions per owned province per turn |
 | `recruits_can_move_same_turn` | false | G50 |
 | `move_range` | 1 | fields per turn |
+| `standing_marches` | true | move orders beyond the range keep marching in later turns (G58) |
 | `forced_march_range` | 3 | fields per turn on forced march |
 | `forced_march_combat_value` | 0.5 | combat value on forced march |
 | `strength_rounding` | down | how `divisions × value` is rounded |

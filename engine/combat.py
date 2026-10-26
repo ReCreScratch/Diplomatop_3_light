@@ -72,4 +72,6 @@ def fight(state, attacker, defender, events):
                              attacker_losses=a_loss, defender_losses=d_loss, winner=winner))
     state.lose_divisions(attacker, a_loss)
     state.lose_divisions(defender, d_loss)
+    for army in (attacker, defender):
+        army.pop("route", None)  # a fight ends a standing march (G58)
     return winner

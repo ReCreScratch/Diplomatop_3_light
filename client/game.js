@@ -4,26 +4,26 @@ import * as R from './render.js';
 import * as O from './orders.js';
 import * as In from './input.js';
 import * as Chat from './chat.js';
+import * as Replay from './replay.js';
 import { api } from './api.js';
-import { $, esc, ctx, setState, P, nName, pName, ownArmyAt } from './ctx.js';
+import { $, esc, ctx, setState, P, nName, pName, ownArmyAt, fieldName } from './ctx.js';
 
-let version = null, fetchedAt = 0, replay = null, sendTo = null;
-const isField = x => Array.isArray(x) && x.length === 2 && typeof x[0] === 'number';
+let version = null, fetchedAt = 0, sendTo = null;
 
 export function startGame(gid, token) {
   ctx.gid = gid; ctx.token = token;
   O.init({ onChange: refresh, toast });
   Chat.init({ toast, poll: () => poll(true) });
-  In.init({ toast, onEscape: () => { if (replay) { replay = null; renderReplay(); } } });
+  In.init({ toast, onEscape: () => { if (Replay.active()) Replay.skip(); } });
+  Replay.init({ onEnd: () => { R.drawMap(ctx.G); In.clearPreviews(); refresh(); } });
   $('btn-ready').onclick = toggleReady;
   $('board').onclick = onBoardClick;
   $('board').onkeydown = e => { if (e.key === 'Enter' && e.target.id === 'b-amt') sendGold(); };
   $('board').oninput = e => { if (e.target.id === 'b-amt') clampAmount(e.target); };
-  $('olist').onclick = e => { const d = e.target.closest('[data-del]'); if (d) O.removeAt(+d.dataset.del); };
+  $('olist').onclick = e => { const h = e.target.closest('[data-halt]'); if (h) { O.add({ type: 'halt', army: h.dataset.halt }); return; } const d = e.target.closest('[data-del]'); if (d) O.removeAt(+d.dataset.del); };
   $('olist').onmouseover = e => { const li = e.target.closest('[data-i]'); R.focusOrder(li ? +li.dataset.i : null); };
   $('olist').onmouseleave = () => R.focusOrder(null);
   $('replay').onclick = onReplayClick;
-  document.addEventListener('keydown', onReplayKey);
   setInterval(tickTimer, 1000);
   (function loop() { poll().finally(() => setTimeout(loop, 2000)); })();
 }
@@ -40,18 +40,23 @@ function apply(v) {
   const newTurn = !ctx.G || ctx.G.turn !== v.turn;
   setState(v); version = v.version; fetchedAt = Date.now();
   O.fromServer(v.my_orders || [], v.order_errors || []);
-  if (newTurn) { O.newTurn(); sendTo = null; replay = null; In.reset(); }
-  R.drawMap(v);
-  In.clearPreviews();
+  if (newTurn) { O.newTurn(); sendTo = null; In.reset(); }
+  if (!Replay.active()) { R.drawMap(v); In.clearPreviews(); }  // a running replay owns the map; onEnd redraws it
   refresh();
   Chat.update();
+  Replay.maybeAuto(v);
+  renderReplay();
 }
 
 function refresh() {
-  R.showArrows(O.book.list, O.book.errors, ctx.G);
-  In.update();
+  if (!Replay.active()) { R.showArrows(O.book.list, O.book.errors, ctx.G); drawStanding(); In.update(); }
   renderTop(); renderOrderList(); renderBoard(); renderReplay();
 }
+
+function drawStanding() {
+  R.showStanding(Object.values(ctx.G.armies).filter(a => a.owner === ctx.G.me && O.marching(a)).map(a => [a.field, ...a.route]));
+}
+const marchers = () => Object.values(ctx.G.armies).filter(a => a.owner === ctx.G.me && O.marching(a));
 
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.hidden = false;
@@ -73,12 +78,12 @@ function renderTop() {
   $('tb-rec').innerHTML = `Rekruten <b>${b.recruits}/${b.limit}</b>`;
   const c = t => L.filter(o => o.type === t).length;
   const parts = [[c('move'), 'Zug', 'Züge'], [c('recruit'), 'Rekrutierung', 'Rekrutierungen'], [c('disband'), 'Abrüstung', 'Abrüstungen'],
-    [c('forced_march'), 'Gewaltmarsch', 'Gewaltmärsche'], [c('send_gold') + c('give_province'), 'Überweisung', 'Überweisungen']]
+    [c('forced_march'), 'Gewaltmarsch', 'Gewaltmärsche'], [c('halt'), 'Halt', 'Halts'], [c('send_gold') + c('give_province'), 'Überweisung', 'Überweisungen']]
     .filter(p => p[0]).map(p => `${p[0]} ${p[0] === 1 ? p[1] : p[2]}`);
   $('tb-sum').textContent = parts.length ? parts.join(', ') : 'keine Befehle';
   const rd = G.ready && G.ready[G.me], btn = $('btn-ready');
   btn.textContent = rd ? 'Bereit ✓ (zurücknehmen)' : 'Bereit'; btn.hidden = !G.me;
-  const idle = Object.values(G.armies).filter(a => ownArmyAt(a.field) && O.movableLeft(a) > 0 && !O.hasOrder(a)).length;
+  const idle = Object.values(G.armies).filter(a => ownArmyAt(a.field) && O.movableLeft(a) > 0 && !O.hasOrder(a) && !O.marching(a)).length;
   $('tb-idle').textContent = idle && !rd ? `${idle} ${idle === 1 ? 'Armee' : 'Armeen'} ohne Befehl` : '';
   tickTimer();
 }
@@ -92,8 +97,9 @@ function tickTimer() {
 
 // ---------- order list (reaches markers hidden under others) ----------
 function renderOrderList() {
-  const L = O.book.list;
-  $('olist').innerHTML = L.length ? '<h4>Befehle</h4><ul>' + L.map((o, i) => {
+  const L = O.book.list, M = marchers();
+  const marches = M.map(a => `<li class="marsch" data-army="${esc(a.id)}">${esc(`Marsch: ${a.divisions - a.fresh} Div. → ${fieldName(a.route[a.route.length - 1])} (noch ~${O.roundsLeft(a)} Runden)`)} <a data-halt="${esc(a.id)}" title="Halt: Marsch beenden">✕</a></li>`).join('');
+  $('olist').innerHTML = L.length || M.length ? '<h4>Befehle</h4><ul>' + marches + L.map((o, i) => {
     const er = (O.book.errors[i] || []).join(' ');
     return `<li data-i="${i}" class="${er ? 'bad' : ''}" title="${esc(er)}">${esc(O.describe(o))}${er ? ' – ' + esc(er) : ''} <a data-del="${i}" title="Löschen">✕</a></li>`;
   }).join('') + '</ul>' : '';
@@ -145,27 +151,11 @@ function onBoardClick(e) {
   Chat.openChannel(tr.dataset.p);
 }
 
-// ---------- last turn replay ----------
+// ---------- last turn replay (cinematic: replay.js) ----------
 function renderReplay() {
   const box = $('replay'), lt = ctx.G.last_turn;
-  R.clearHighlight('rp');
-  if (!lt || !lt.events || !lt.events.length) { box.innerHTML = ''; return; }
-  if (!replay) { box.innerHTML = `<button data-r="open">Letzte Runde (${lt.turn}) ansehen</button>`; return; }
-  replay.i = Math.max(0, Math.min(lt.events.length - 1, replay.i));
-  const ev = lt.events[replay.i];
-  box.innerHTML = `<button data-r="prev">◀</button> <button data-r="next">▶</button> <button data-r="close">✕</button> ` +
-    `Runde ${lt.turn} · ${replay.i + 1}/${lt.events.length}: ${esc(ev.text)} <small>(←/→ blättern)</small>`;
-  const hl = (v, kind) => { const fs = isField(v) ? [v] : Array.isArray(v) ? v.filter(isField) : []; if (fs.length) R.highlight(fs, kind); };
-  hl(ev.from, 'rp-from'); hl(ev.back_to, 'rp-from'); hl(ev.path, 'rp-path'); hl(ev.to, 'rp-to'); hl(ev.field, 'rp-field');
-  if (ev.province && P()[ev.province]) hl(P()[ev.province].capital, 'rp-field');
+  box.innerHTML = Replay.canReplay(lt) && !Replay.active() ? `<button data-r="open">Letzte Runde ansehen (${lt.turn})</button>` : '';
 }
 function onReplayClick(e) {
-  const r = e.target.dataset.r; if (!r) return;
-  if (r === 'open') replay = { i: 0 }; else if (r === 'close') replay = null;
-  else if (replay) replay.i += r === 'next' ? 1 : -1;
-  renderReplay();
-}
-function onReplayKey(e) {
-  if (!replay || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); replay.i += e.key === 'ArrowRight' ? 1 : -1; renderReplay(); }
+  if (e.target.dataset.r === 'open' && Replay.canReplay(ctx.G.last_turn)) { Replay.start(ctx.G.last_turn); renderReplay(); }
 }

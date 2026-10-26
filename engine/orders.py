@@ -4,6 +4,8 @@ validate(state, player, pending) -> list of German error strings (empty = ok).
 reserve(state, pending) notes a valid order's effect so later orders in the same list see it.
 apply(state, player, events) executes the order during resolution.
 """
+import copy
+
 from .events import make_event
 from .hexgrid import is_adjacent
 
@@ -267,13 +269,19 @@ class ForcedMarch(Order):
                                  army=army["id"], on=on))
 
 
+def range_of(state, army, forced=None):
+    """Fields per turn; forced = forced-march setting to assume (None = the army's current one)."""
+    on = army["forced_march"] if forced is None else forced
+    return state.rules["forced_march_range" if on else "move_range"]
+
+
 def path_errors(state, army, path, pending):
-    """Range, adjacency and terrain of a path for this army."""
+    """Adjacency and terrain of a path for this army. The range limits the path only when standing
+    marches are off; otherwise only this turn's part is executed and the rest becomes a route (G58)."""
     on = pending.toggles.get(army["id"], army["forced_march"])
-    key = "forced_march_range" if on else "move_range"
     if not path:
         return ["Pfad ist leer."]
-    if len(path) > state.rules[key]:
+    if len(path) > range_of(state, army, on) and not state.rules.get("standing_marches"):
         return ["Reichweite überschritten."]
     terrain = state.unit_type(army)["terrain"]
     current = army["field"]
@@ -330,7 +338,65 @@ class Move(Order):
         from .phases.movement import execute_move  # late import: movement uses this module
         army = state.armies[self.data["army"]]
         count = min(self.data["count"], state.movable(army))
-        execute_move(state, army, count, self.data["path"], events)
+        path = self.data["path"]
+        army.pop("route", None)  # a new move order replaces a standing route
+        here = range_of(state, army)
+        execute_move(state, army, count, path[:here], events, rest=path[here:], goal=path[-1])
+
+
+class AutoMove(Order):
+    """Internal (not registered, players cannot send it): the army's standing route continues."""
+    type = "auto_move"
+    phase = "movement"
+    priority = Move.priority
+
+    def __init__(self, army_id):
+        super().__init__({"type": self.type, "army": army_id})
+
+    def resolution_errors(self, state, player):
+        army = own_army(state, player, self.data["army"])
+        if not army or not army.get("route") or state.movable(army) <= 0:
+            return []
+        errors = path_errors(state, army, army["route"], Pending())
+        if errors:
+            army.pop("route")
+        return errors
+
+    def apply(self, state, player, events):
+        from .phases.movement import execute_move
+        army = own_army(state, player, self.data["army"])
+        if not army or not army.get("route") or state.movable(army) <= 0:
+            return
+        route = army.pop("route")   # fresh divisions stay behind; the route goes with the moving part
+        here = range_of(state, army)
+        execute_move(state, army, state.movable(army), route[:here], events, rest=route[here:],
+                     goal=route[-1], auto=True)
+
+
+@register
+class Halt(Order):
+    type = "halt"
+    phase = "movement"
+    priority = 0
+    fields = {"army": "str"}
+
+    def validate(self, state, player, pending):
+        errors = self.shape_errors()
+        if errors:
+            return errors
+        army = own_army(state, player, self.data["army"])
+        if not army:
+            return ["Armee gehört dir nicht."]
+        if not army.get("route"):
+            return ["Armee hat keinen Marschbefehl."]
+        return []
+
+    def apply(self, state, player, events):
+        army = state.armies[self.data["army"]]
+        army.pop("route", None)
+        events.append(make_event("halt", player,
+                                 f"{state.nation_name(player)}: Armee {army['id']} hält an und beendet den Marsch.",
+                                 army=army["id"]))
 
 
 def parse_order(data):
@@ -345,6 +411,12 @@ def skipped(state, player, data, reason):
                       order=data, reason=reason)
 
 
+def snapshot(state):
+    """The board right now: armies and province owners (the replay's 'snap')."""
+    armies = {i: {k: v for k, v in a.items() if k != "route"} for i, a in state.armies.items()}  # routes are secret
+    return {"armies": copy.deepcopy(armies), "owners": dict(state.owners)}
+
+
 def run_phase_orders(state, parsed, phase, events):
     """Run all orders of one phase: by priority, then players in player order, then entry order."""
     types = [cls for cls in ORDER_TYPES.values() if cls.phase == phase]
@@ -352,8 +424,11 @@ def run_phase_orders(state, parsed, phase, events):
         for player in state.player_order:
             for order in parsed.get(player, []):
                 if order.phase == phase and order.priority == priority:
+                    first = len(events)
                     errors = order.resolution_errors(state, player)
                     if errors:
                         events.append(skipped(state, player, order.data, errors[0]))
                     else:
                         order.apply(state, player, events)
+                    if len(events) > first:
+                        events[-1]["snap"] = snapshot(state)  # board right after this order

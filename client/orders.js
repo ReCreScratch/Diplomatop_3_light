@@ -31,6 +31,10 @@ export const rangeOf = a => fmOn(a) ? rules().forced_march_range : rules().move_
 // several moves may split one army (G56); together they use at most its movable divisions
 export const movableLeft = a => Math.max(0, movable(a) - sum('disband', a.id) - sum('move', a.id));
 export const disbandMax = a => Math.max(0, a.divisions - sum('disband', a.id) - sum('move', a.id));
+export const halted = a => book.list.some(o => o.type === 'halt' && o.army === a.id);
+// standing march (army.route from the server) still in force next turn: not replaced by a new move, not halted
+export const marching = a => !!(a.route && a.route.length) && !moveOf(a.id) && !halted(a);
+export const roundsLeft = a => Math.ceil(a.route.length / rangeOf(a));
 export const hasOrder = a => book.list.some(o => o.army === a.id);
 export const gifted = prov => book.list.some(o => o.type === 'give_province' && o.province === prov);
 
@@ -60,7 +64,7 @@ export function setForcedMarch(a, on) {
     book.list = book.list.filter(o => !(o.type === 'forced_march' && o.army === a.id));
     if (on !== a.forced_march) book.list.push({ type: 'forced_march', army: a.id, on });
     const r = on ? rules().forced_march_range : rules().move_range;
-    book.list = book.list.filter(o => !(o.type === 'move' && o.army === a.id && o.path.length > r && ++dropped));
+    if (!rules().standing_marches) book.list = book.list.filter(o => !(o.type === 'move' && o.army === a.id && o.path.length > r && ++dropped));
   });
   if (dropped) hooks.toast('Der Zugbefehl war für diese Reichweite zu lang und wurde entfernt.');
 }
@@ -95,7 +99,8 @@ export function describe(o) {
   const army = o.army && ctx.G.armies[o.army];
   const pn = f => { const p = P()[tokenAt(f)]; return p ? p.name : 'Feld'; };
   switch (o.type) {
-    case 'move': return army ? `Zug: ${o.count} Div. von ${pn(army.field)} nach ${pn(o.path[o.path.length - 1] || army.field)}` : 'Zug';
+    case 'move': return army ? `Zug: ${o.count} Div. von ${pn(army.field)} nach ${pn(o.path[o.path.length - 1] || army.field)}${o.path.length > rangeOf(army) ? ` (${Math.ceil(o.path.length / rangeOf(army))} Runden)` : ''}` : 'Zug';
+    case 'halt': return `Halt: Armee in ${army ? pn(army.field) : o.army} bleibt stehen`;
     case 'recruit': return `Rekrutieren: +${o.count} in ${pn(o.field)}`;
     case 'disband': return `Abrüsten: −${o.count} in ${army ? pn(army.field) : o.army}`;
     case 'forced_march': return `Gewaltmarsch ${o.on ? 'an' : 'aus'} (${army ? pn(army.field) : o.army})`;

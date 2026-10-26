@@ -3,7 +3,7 @@
 import { neighbours, parseGrid } from './hex.js';
 
 const S = 20, SQ3 = Math.sqrt(3), NS = 'http://www.w3.org/2000/svg';
-let svg, L = {}, H = {}, theme = {}, mapKey = null, polys = {}, vb, full, down = null, hoverKey = null, rows = [], viewHooks = [];
+let svg, L = {}, H = {}, theme = {}, mapKey = null, polys = {}, vb, full, down = null, hoverKey = null, rows = [], viewHooks = [], curMap = null;
 
 const mk = (tag, attrs, parent) => {
   const e = document.createElementNS(NS, tag);
@@ -30,7 +30,7 @@ export function init(svgEl, handlers) {
   }
   const mc = mk('marker', { id: 'ahc', viewBox: '0 0 10 10', refX: 7, refY: 5, markerWidth: 4, markerHeight: 4, orient: 'auto' }, defs);
   mk('path', { d: 'M0 0L10 5L0 10z', class: 'arrowhead chat' }, mc);
-  for (const n of ['base', 'reach', 'hi', 'marks', 'armies', 'orders', 'draft']) L[n] = mk('g', { id: 'l-' + n }, svg);
+  for (const n of ['base', 'reach', 'hi', 'marks', 'armies', 'routes', 'orders', 'draft']) L[n] = mk('g', { id: 'l-' + n }, svg);
   svg.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, moved: false }; });
   svg.addEventListener('pointermove', e => {
     if (down && e.buttons) {
@@ -148,13 +148,25 @@ export function drawMap(state) {
   theme = state.theme || {};
   svg.style.background = theme.background || '#000';
   if (mapKey !== state.map.name) { mapKey = state.map.name; buildBase(state); }
+  curMap = state.map;
+  paintOwners(state.owners);
+  drawArmies(Object.values(state.armies));
+}
+function paintOwners(owners) {
   for (const tok in polys) {
-    const o = state.owners[tok];
+    const o = owners[tok];
     for (const p of polys[tok]) p.setAttribute('fill', o ? colorOf(o) : (theme.neutral_color || '#888'));
   }
+}
+function drawArmies(list) {
   clear(L.armies);
-  const capSet = new Set(Object.values(state.map.provinces).map(p => p.capital.join()));
-  for (const a of Object.values(state.armies)) {
+  const caps = new Set(Object.values(curMap.provinces).map(p => p.capital.join()));
+  list.forEach(a => armyToken(a, caps));
+}
+// One army shield in L.armies (returns its <g>); also used by the replay block at the end of this file.
+function armyToken(a, caps) {
+  const capSet = caps || new Set(Object.values(curMap.provinces).map(p => p.capital.join()));
+  {
     const { x, y } = centre(a.field), yy = y + (capSet.has(a.field.join()) ? S * 0.35 : 0);
     const fresh = a.fresh || 0, label = String(a.divisions - fresh) + (fresh ? '+' + fresh : '');
     // light parchment shield with a band in the owner's colour, so it stands out on its own land
@@ -171,6 +183,7 @@ export function drawMap(state) {
       mk('circle', { cx: l - 1, cy: t0 + 3, r: 6, class: 'fmseal' }, g);
       txt(g, l - 1, t0 + 3, '»', 'fmflag');
     }
+    return g;
   }
 }
 
@@ -207,6 +220,17 @@ export function showArrows(orders, errors, state) {
       marker(i, c.x - 12, c.y + 11, o.on ? '»' : '»×', errs, o.on ? 'Gewaltmarsch an' : 'Gewaltmarsch aus');
     }
   });
+}
+
+// Standing marches of own armies: faint dotted line with a small destination flag. routes = [[start, ...fields]].
+export function showStanding(routes) {
+  clear(L.routes);
+  for (const r of routes) {
+    if (r.length < 2) continue;
+    mk('polyline', { points: r.map(centre).map(p => p.x + ',' + p.y).join(' '), class: 'standing' }, L.routes);
+    const c = centre(r[r.length - 1]);
+    mk('path', { d: `M${c.x - 2} ${c.y + 6}V${c.y - 9}L${c.x + 7} ${c.y - 5}L${c.x - 2} ${c.y - 1}`, class: 'standing-flag' }, L.routes);
+  }
 }
 
 // Reachable fields as a subtle overlay. cells = [[field, kind]], kind 'go' | 'attack'. Empty/null clears it.
@@ -262,4 +286,135 @@ export function showMarks(marks, cls = 'chat') {
 export function panTo(f) {
   const { x, y } = centre(f);
   vb.x = x - vb.w / 2; vb.y = y - vb.h / 2; applyVb();
+}
+
+// ======================= replay (replay.js) =======================
+// Everything below serves the animated turn replay. Looks come from replay.css (.fx-*) and theme colours.
+const capKeys = () => new Set(Object.values(curMap.provinces).map(p => p.capital.join()));
+const tokenPos = (f, caps) => { const c = centre(f); return { x: c.x, y: c.y + (caps.has(f.join()) ? S * 0.35 : 0) }; };
+const fxLayer = () => L.fx || (L.fx = mk('g', { id: 'l-fx' }, svg));
+const ease = 'cubic-bezier(.4,0,.2,1)';
+
+// Replay mode: hides order arrows and selection overlays, blocks nothing else (input is ignored by the caller).
+export function setReplayMode(on) {
+  svg.classList.toggle('replaying', !!on);
+  for (const n of ['orders', 'draft', 'reach', 'hi']) L[n].style.display = on ? 'none' : '';
+  if (!on) clear(fxLayer());
+}
+// Draw a whole board: armies = {id: army}, owners = {province: owner}. Instant.
+export function drawBoard(armies, owners) {
+  paintOwners(owners);
+  drawArmies(Object.values(armies));
+}
+// Add or replace the shield of one army (e.g. after a split changed its number); returns the <g>.
+export function putToken(a) {
+  tokenEl(a.id)?.remove();
+  return armyToken(a);
+}
+export const tokenEl = id => L.armies.querySelector(`[data-army="${id}"]`);
+export const removeToken = id => tokenEl(id)?.remove();
+// Slide a token along fields [from, ...path]; ms per hex. Resolves when done. Honors prefers-reduced-motion by jumping.
+export function animateToken(g, fields, msPerHex) {
+  if (!g || fields.length < 2) return Promise.resolve();
+  const caps = capKeys(), pts = fields.map(f => tokenPos(f, caps)), p0 = pts[0];
+  g.classList.add('moving');
+  g.parentNode.appendChild(g); // on top
+  const frames = pts.map(p => ({ transform: `translate(${p.x - p0.x}px,${p.y - p0.y}px)` }));
+  const dur = msPerHex * (pts.length - 1);
+  const anim = g.animate(frames, { duration: dur, easing: 'linear', fill: 'forwards' });
+  return anim.finished.then(() => { g.classList.remove('moving'); }, () => {});
+}
+// Change a province's colour smoothly (the base fill already switches, the animation fades from the old one).
+export function setProvinceFill(code, owner, ms) {
+  const to = owner ? colorOf(owner) : (theme.neutral_color || '#888');
+  const jobs = [];
+  for (const p of polys[code] || []) {
+    const from = p.getAttribute('fill');
+    p.setAttribute('fill', to);
+    if (ms > 0) jobs.push(p.animate([{ fill: from }, { fill: to }], { duration: ms, easing: ease }).finished.catch(() => {}));
+  }
+  return Promise.all(jobs);
+}
+// Flash the hexes of a province (all its fields) once.
+export function flashProvince(code, ms, cls = 'fx-prov') {
+  const jobs = [];
+  for (const p of polys[code] || []) {
+    const c = mk('polygon', { points: p.getAttribute('points'), class: cls }, fxLayer());
+    jobs.push(c.animate([{ opacity: 0 }, { opacity: 0.85 }, { opacity: 0 }], { duration: ms }).finished.catch(() => {}).then(() => c.remove()));
+  }
+  return Promise.all(jobs);
+}
+// Short effect on a field. kind: 'fight' | 'conquest' | 'fail' | 'recruit' | 'disband' | 'merge' | 'gift' | 'march'.
+// text: string, or for 'fight' [attackerText, defenderText]. Resolves after ms.
+export function effect(field, kind, text, ms = 1000) {
+  const { x, y } = centre(field), k = Math.min(3, Math.max(1, 0.9 / svg.getScreenCTM().a));  // keep effects readable when zoomed out
+  const g = mk('g', { class: 'fx fx-' + kind, transform: `translate(${x} ${y}) scale(${k.toFixed(2)})` }, fxLayer());
+  const run = (el, frames, o = {}) => el.animate(frames, { duration: ms, easing: ease, fill: 'forwards', ...o }).finished.catch(() => {});
+  const jobs = [];
+  const float = (s, dx, cls, delay = 0) => {
+    const t = txt(g, dx, -4, s, 'fxt ' + cls);
+    jobs.push(run(t, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(-6px)', offset: 0.2 },
+      { opacity: 1, transform: 'translateY(-18px)', offset: 0.75 }, { opacity: 0, transform: 'translateY(-26px)' }], { delay }));
+  };
+  if (kind === 'fight') {
+    mk('polygon', { points: hexPts(0, 0), class: 'fx-flash' }, g);
+    jobs.push(run(g.firstChild, [{ opacity: 0 }, { opacity: 0.7, offset: 0.2 }, { opacity: 0 }]));
+    const sw = mk('g', { class: 'fx-swords' }, g);
+    mk('path', { d: 'M-10 -10L9 9M-10 10L9 -9M-12 -6L-6 -12M-12 6L-6 12M12 -6L6 -12M12 6L6 12' }, sw);
+    jobs.push(run(sw, [{ transform: 'scale(.3) rotate(-30deg)', opacity: 0 }, { transform: 'scale(1.25) rotate(0deg)', opacity: 1, offset: 0.25 },
+      { transform: 'scale(1) rotate(0deg)', opacity: 1, offset: 0.7 }, { transform: 'scale(1.1)', opacity: 0 }]));
+    if (Array.isArray(text)) { float(text[0], -S * 0.8, 'fx-neg'); float(text[1], S * 0.8, 'fx-neg', 120); }
+  } else if (kind === 'conquest' || kind === 'fail') {
+    const ring = mk('polygon', { points: hexPts(0, 0), class: 'fx-ring' }, g);
+    jobs.push(run(ring, [{ transform: 'scale(.6)', opacity: 0.9 }, { transform: 'scale(1.9)', opacity: 0 }]));
+    if (text) float(text, 0, kind === 'fail' ? 'fx-dim' : 'fx-gold');
+  } else {
+    float(text || '', 0, kind === 'recruit' ? 'fx-pos' : kind === 'disband' ? 'fx-neg' : 'fx-gold');
+    if (kind === 'recruit' || kind === 'gift' || kind === 'merge') {
+      const ring = mk('polygon', { points: hexPts(0, 0), class: 'fx-ring soft' }, g);
+      jobs.push(run(ring, [{ transform: 'scale(.7)', opacity: 0.7 }, { transform: 'scale(1.3)', opacity: 0 }]));
+    }
+  }
+  return Promise.all(jobs).then(() => g.remove());
+}
+export const clearFx = () => { if (L.fx) clear(L.fx); };
+
+// Camera: is the field comfortably inside the current view? / smoothly centre on a field (zoom unchanged).
+export function isVisible(f, margin = 0.12) {
+  const { x, y } = centre(f);
+  return x > vb.x + vb.w * margin && x < vb.x + vb.w * (1 - margin) && y > vb.y + vb.h * margin && y < vb.y + vb.h * (1 - margin);
+}
+let panId = 0;
+export const viewCentre = () => ({ x: vb.x + vb.w / 2, y: vb.y + vb.h / 2 });
+export function panSmooth(pt, ms) {
+  const lim = (v, lo, hi) => (hi < lo ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));  // stay inside the map
+  const x0 = vb.x, y0 = vb.y, t0 = performance.now();
+  const x1 = lim(pt.x - vb.w / 2, full.x, full.x + full.w - vb.w), y1 = lim(pt.y - vb.h / 2, full.y, full.y + full.h - vb.h);
+  const id = ++panId;  // a newer pan (or an instant one) cancels this one
+  if (!(ms > 0)) { vb.x = x1; vb.y = y1; applyVb(); return Promise.resolve(); }
+  return new Promise(res => {
+    const step = now => {
+      if (id !== panId) { res(); return; }
+      const k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+      vb.x = x0 + (x1 - x0) * e; vb.y = y0 + (y1 - y0) * e; applyVb();
+      if (k < 1) requestAnimationFrame(step); else res();
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+// ---------- route drawing (input.js) ----------
+// solid = [start, ...fields] reachable this turn, faint = [stop, ...rest] beyond range, waypoints = fields, stop = end of this turn's march.
+export function showRoute(solid, faint = [], waypoints = [], stop = null, attack = false) {
+  clear(L.draft);
+  if (!solid || solid.length < 2) return;
+  const line = (fields, cls, end) => mk('polyline', { points: fields.map(centre).map(p => p.x + ',' + p.y).join(' '), class: cls, ...(end ? { 'marker-end': `url(#ah${attack ? 'e' : ''})` } : {}) }, L.draft);
+  if (faint && faint.length > 1) line(faint, 'route-far');
+  line(solid, 'route-near' + (attack ? ' attack' : ''), !(faint && faint.length > 1));
+  for (const w of waypoints) { const c = centre(w); mk('circle', { cx: c.x, cy: c.y, r: 4.5, class: 'wp' }, L.draft); }
+  if (stop) {
+    const c = centre(stop);
+    mk('circle', { cx: c.x, cy: c.y, r: S * 0.62, class: 'route-stop' + (attack ? ' attack' : '') }, L.draft);
+    if (!attack) mk('path', { d: `M${c.x + 3} ${c.y + 4}V${c.y - 11}L${c.x + 12} ${c.y - 7}L${c.x + 3} ${c.y - 3}`, class: 'route-flag' }, L.draft);
+  }
 }

@@ -29,7 +29,7 @@ def test_simple_move_and_text():
 
 
 def test_range_is_one_by_default():
-    state = make_game()
+    state = make_game(standing_marches=False)
     put(state, "AA", A1_CAP, 3)
     assert errors_of(state, "AA", move("a1", 3, A1_MID, A2_CAP))[0]
     assert errors_of(state, "AA", move("a1", 3, A1_MID)) == [[]]
@@ -42,7 +42,7 @@ def test_move_range_setting():
 
 
 def test_forced_march_extends_range_even_if_toggle_entered_later():
-    state = make_game()
+    state = make_game(standing_marches=False)
     put(state, "AA", A1_CAP, 3)
     path = [A1_MID, A2_CAP, N1_CAP]
     assert errors_of(state, "AA", move("a1", 3, *path))[0]
@@ -61,7 +61,7 @@ def test_forced_march_toggle_before_movement_and_persists():
 
 
 def test_forced_march_off_restores_range():
-    state = make_game()
+    state = make_game(standing_marches=False)
     put(state, "AA", A1_CAP, 3, forced_march=True)
     assert errors_of(state, "AA", move("a1", 3, A1_MID, A2_CAP)) == [[]]
     assert errors_of(state, "AA", move("a1", 3, A1_MID, A2_CAP), march("a1", False))[0]
@@ -462,3 +462,30 @@ def test_conquer_province_of_nation_without_player():
     put(state, "AA", B2_CAP, 4)
     engine.resolve_turn(state, {"AA": [move("a1", 4, C1_CAP)]})
     assert state.owners["C1"] == "AA"  # neutral province, cost 2
+
+
+# --- replay snapshots ------------------------------------------------------
+def test_snap_on_last_event_of_each_order():
+    state = make_game()
+    put(state, "AA", A1_CAP, 3)
+    put(state, "BB", B1_CAP, 2)
+    events = engine.resolve_turn(state, {"AA": [move("a1", 2, A1_MID), move("a1", 1, A1_MID)], "BB": []})
+    snapped = [e for e in events if "snap" in e]
+    assert [e["kind"] for e in snapped] == ["move", "merge"]
+    first = snapped[0]["snap"]
+    assert first["armies"]["a1"]["divisions"] == 1 and first["armies"]["a3"]["field"] == A1_MID
+    assert not any("snap" in e for e in events if e["kind"] in ("turn_start", "income", "upkeep"))
+    last = snapped[-1]["snap"]
+    strip = lambda armies: {i: {k: v for k, v in a.items() if k != "fresh"} for i, a in armies.items()}
+    assert strip(last["armies"]) == strip(state.armies) and last["owners"] == state.owners
+
+
+def test_snap_is_a_copy_and_skipped_has_one():
+    state = make_game()
+    put(state, "AA", A1_CAP, 3)
+    events = engine.resolve_turn(state, {"AA": [move("a1", 3, A1_MID), move("zz", 1, A1_MID)]})
+    snap = of_kind(events, "move")[0]["snap"]
+    assert snap["armies"]["a1"]["field"] == A1_MID
+    state.armies["a1"]["field"] = [9, 9]
+    assert snap["armies"]["a1"]["field"] == A1_MID
+    assert "snap" in of_kind(events, "skipped")[0]

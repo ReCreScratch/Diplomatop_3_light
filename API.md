@@ -52,13 +52,20 @@ GameState.to_dict() / GameState.from_dict(d)                    # JSON-safe, rou
 | `recruit` | `field`, `count` | recruitment |
 | `disband` | `army`, `count` | recruitment |
 | `forced_march` | `army`, `on` (bool) | movement (all toggles first, then moves) |
+| `halt` | `army` | movement (with the toggles, before moves): deletes the army's standing route |
 | `move` | `army`, `count`, `path` (list of fields, start field excluded) | movement |
 
 Rule details beyond RULES.md (*[default]*):
 - `recruit` on an own capital joins the own army there or creates a new army; on any field with an own army it joins it.
 - `move` with `count` < movable divisions splits; the moving part is a new army that inherits forced march.
   Merging at the end of a move: the army already standing there keeps its id and its forced-march flag.
-- Path: adjacent passable fields, length ≤ range (forced march state *after* this turn's toggle orders of the same army).
+- Path: adjacent passable fields (forced march state *after* this turn's toggle orders of the same army). With
+  `standing_marches` (G58) the path may be longer than the range: only the first `range` fields run this turn and the
+  rest is stored as `army.route` (list of fields; only in the owner's own army objects, never shown to others, never in
+  `snap`/`before`). With the setting off, a longer path is the error "Reichweite überschritten.".
+- Standing routes run automatically each turn in the owner's slot before their new orders (internal auto move, not an
+  order type). A new `move` for the army or a `halt` replaces/clears the route; a fight, a conquest attempt or a merge
+  ends it. Auto events are `move` events with `"auto": true` and text "… marschiert weiter: … (Ziel …)".
   Passing over own armies is fine (merge only at the end). Entering a field with an enemy army → fight, stop there.
 - Conquest is attempted on the field where the move **ends** (path end or fight stop) if it is the capital of a
   province not owned by the mover. Capitals passed mid-path are not conquered. Failed conquest → army goes back to
@@ -71,11 +78,15 @@ Rule details beyond RULES.md (*[default]*):
 Each event: `{"kind": ..., "player": pid|null, "text": "German one-liner", ...extra}`. Kinds and extras:
 `turn_start` (`player_order`), `income` (`amount`), `upkeep` (`amount`), `send_gold` (`to`, `amount`),
 `give_province` (`province`, `to`), `recruit` (`field`, `count`, `army`), `disband` (`army`, `field`, `count`),
-`forced_march` (`army`, `on`), `move` (`army`, `from`, `path`, `to`, `count`), `merge` (`army`, `into`, `field`),
+`forced_march` (`army`, `on`), `move` (`army`, `from`, `path`, `to`, `count`, optional `auto`: true), `halt` (`army`), `merge` (`army`, `into`, `field`),
 `fight` (`field`, `attacker`, `defender`, `attacker_losses`, `defender_losses`, `winner`: pid|null),
 `conquest` (`province`, `field`, `cost`, `old_owner`), `conquest_failed` (`province`, `field`, `cost`, `back_to`),
 `skipped` (`order`, `reason`).
 Income/upkeep events of the new turn start come last.
+**Snapshots:** after each order of the transfers/recruitment/movement phases (applied or skipped) the *last* event that
+order produced carries `"snap": {"armies": {id: {id, owner, field, divisions, fresh, forced_march}}, "owners": {province: owner}}`
+= the whole board right after that order. So all events up to and including one with a `snap` form one group (a move with
+its fight, conquest and merge). Unknown-order `skipped` events and the start-of-turn block have no snap.
 
 ## 6. preview_move result
 ```json
@@ -112,7 +123,7 @@ State view:
  "map": {...}, "theme": {...theme.json...}, "owners": {...}, "armies": {...},
  "board": [...], "my_orders": [...], "order_errors": [[...]],
  "incoming": [{"type": "send_gold", "from": "FR", "amount": 5}],
- "last_turn": {"turn": 2, "events": [...]},
+ "last_turn": {"turn": 2, "events": [...], "before": {"armies": {...}, "owners": {...}}, "player_order": ["FR", "GB"]},
  "chat": [{"id": 4, "from": "FR", "to": null, "text": "Hallo", "marks": [{"kind": "field", "f": [3, 4]}], "turn": 2, "ts": 1760000000}]}
 ```
 `chat` holds the public messages (`to: null`) plus private ones where the caller is sender or receiver, oldest first
@@ -120,6 +131,9 @@ State view:
 `CHAT_MAX_LEN` 1000 characters, `CHAT_MAX_MARKS` 20 marks; text may be empty if there is at least one mark;
 fields must lie inside the grid; `to` must be another joined player. Chat is stored in `saves/{gid}.json`
 and bumps `version`.
+`last_turn.before` is the board (armies, owners) at the start of that resolved turn and `last_turn.player_order` the order
+in which it was resolved; the client replay starts there
+and applies each group's `snap`. (Saves from before this feature have no `before`; the client then skips the auto-replay.)
 `my_recruit_limit` (= `recruit_limit_per_province` × own provinces at turn start) is also in the view.
 While `status == "lobby"`, `GET state` returns only `{changed, version, status}`; the client uses `/lobby` there.
 Errors: HTTP 400 (bad input), 403 (wrong token / not host), 404 (unknown game), body `{"detail": "German text"}`.

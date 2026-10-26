@@ -3,14 +3,25 @@ from ..combat import fight
 from ..conquest import conquer, conquest_target
 from ..events import make_event
 from ..hexgrid import tup
-from ..orders import plural, run_phase_orders
+from ..orders import AutoMove, plural, run_phase_orders
 
 PHASE = "movement"
 
 
 def run(state, parsed, events):
-    """Toggles (priority 0) then moves (priority 1), players in player order."""
+    """Toggles and halts (priority 0), then moves (priority 1), players in player order.
+    A player's standing routes continue first in their slot (G58), unless they gave the army a new move."""
+    add_auto_orders(state, parsed)
     run_phase_orders(state, parsed, PHASE, events)
+
+
+def add_auto_orders(state, parsed):
+    """Put an automatic move for every army with a route in front of its owner's orders."""
+    for player in state.player_order:
+        ids = [a["id"] for a in state.armies.values() if a["owner"] == player and a.get("route")]
+        own = parsed.setdefault(player, [])
+        given = {o.data.get("army") for o in own if o.type == "move"}
+        parsed[player] = [AutoMove(i) for i in ids if i not in given] + own
 
 
 def split_off(state, army, count):
@@ -48,22 +59,30 @@ def merge_standing(state, mover, events):
             return
 
 
-def execute_move(state, army, count, path, events):
-    """One move: split, walk, fight, conquer, merge. Everything is checked against the current state."""
+def execute_move(state, army, count, path, events, rest=(), goal=None, auto=False):
+    """One move: split, walk, fight, conquer, merge. Everything is checked against the current state.
+    rest = route fields beyond this turn's path; kept as army['route'] unless the march ends
+    (fight, conquest attempt, merge) (G58)."""
     player = army["owner"]
     start = list(army["field"])
     mover = split_off(state, army, count)
     walked, back_to, enemy = walk(state, mover, path)
     target = walked[-1]
-    events.append(make_event(
-        "move", player,
-        f"{state.nation_name(player)} zieht {plural(count, 'Division', 'Divisionen')} nach {state.place_name(target)}.",
-        army=mover["id"], **{"from": start}, path=walked, to=target, count=count))
+    name, amount = state.nation_name(player), plural(count, "Division", "Divisionen")
+    if auto:
+        # events are public: the destination of a standing march stays secret
+        text = f"{name} marschiert weiter: {amount} nach {state.place_name(target)}."
+    else:
+        text = f"{name} zieht {amount} nach {state.place_name(target)}."
+    events.append(make_event("move", player, text, army=mover["id"], **{"from": start}, path=walked,
+                             to=target, count=count, **({"auto": True} if auto else {})))
     if enemy and fight(state, mover, enemy, events) != player:
         return
     mover["field"] = list(target)
     code = conquest_target(state, target, player)
     if code:
         conquer(state, mover, code, back_to, events)  # on failure the army is sent back to back_to
-    if mover["id"] in state.armies:
-        merge_standing(state, mover, events)
+        rest = ()                                     # a conquest attempt ends the march
+    merge_standing(state, mover, events)
+    if rest and not enemy and mover["id"] in state.armies:  # no fight, not merged: the march goes on next turn
+        mover["route"] = [list(f) for f in rest]

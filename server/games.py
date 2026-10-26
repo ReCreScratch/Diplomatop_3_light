@@ -1,4 +1,5 @@
 """Game registry: lobby, players/tokens, orders, ready state, timer, resolution."""
+import copy
 import json
 import random
 import secrets
@@ -7,6 +8,7 @@ import time
 from pathlib import Path
 
 import engine
+from engine.orders import snapshot
 from . import storage
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -174,8 +176,10 @@ class Games:
 
     def _resolve(self, game):
         turn = game.state.turn
+        before = snapshot(game.state)
+        order = list(game.state.player_order)
         events = engine.resolve_turn(game.state, game.orders)
-        game.last_turn = {"turn": turn, "events": events}
+        game.last_turn = {"turn": turn, "events": events, "before": before, "player_order": order}
         self._begin_turn(game)
         self._save(game)
 
@@ -208,7 +212,9 @@ class Games:
                 "player_order": st.player_order, "ready": dict(game.ready),
                 "players": {n: {"name": p["name"]} for n, p in st.players.items()},
                 "my_gold": st.players[nation]["gold"], "my_recruit_limit": limit, "rules": st.rules,
-                "map": st.map, "theme": self._theme(game), "owners": st.owners, "armies": st.armies,
+                "map": st.map, "theme": self._theme(game), "owners": st.owners,
+                "armies": {i: a if a["owner"] == nation else {k: v for k, v in a.items() if k != "route"}
+                           for i, a in st.armies.items()},   # foreign routes are secret
                 "board": engine.board(st), "my_orders": my_orders,
                 "order_errors": engine.validate_orders(st, nation, my_orders),
                 "incoming": [], "last_turn": game.last_turn,

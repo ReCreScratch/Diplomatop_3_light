@@ -43,6 +43,7 @@ def conquer(state, army, code, back_to, events):
     state.owners[code] = army["owner"]
     state.lose_divisions(army, cost)
     events.append(make_event("conquest", army["owner"],
-                             f"{name} erobert {prov} von {state.nation_name(old_owner)} (Kosten: {cost} Divisionen).",
+                             (f"{name} erobert {prov} von {state.nation_name(old_owner)} (Kosten: {cost} Divisionen)." if old_owner
+                              else f"{name} erobert das neutrale {prov} (Kosten: {cost} Divisionen)."),
                              province=code, field=field, cost=cost, old_owner=old_owner))
     return True

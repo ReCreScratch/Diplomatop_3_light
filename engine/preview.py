@@ -1,7 +1,7 @@
 """Read-only views: preview_move and the public board."""
 from .combat import preview_fight
 from .conquest import can_pay, conquest_cost, conquest_target
-from .orders import Move, Pending, plural
+from .orders import Move, Pending, plural, range_of
 from .phases.start_of_turn import income_of, upkeep_of
 
 
@@ -34,6 +34,7 @@ def preview_move(state, player, army_id, count, path, forced_march=None):
     if forced_march is not None:
         army = {**army, "forced_march": bool(forced_march)}
     count = min(count, state.movable(army))
+    path = path[:range_of(state, army)]   # only this turn's part (standing marches, G58)
     index, enemy = first_enemy(state, player, path)
     end = path[index] if enemy else path[-1]
     survivors, fight, texts = count, None, []
