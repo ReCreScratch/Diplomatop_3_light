@@ -1,34 +1,36 @@
 {
  "description": "Nur Darstellung. Farben und spaeter Texturen hier aendern, ohne die Spiellogik anzufassen.",
- "background": "#1c120d",
- "hex_outline": "#1d2421",
- "province_border": "#ffffff",
- "capital_icon": "S",
- "neutral_color": "#8a8a80",
+ "background": "#27302f",
+ "hex_outline": "#2b1a10",
+ "province_border": "#2b1a10",
+ "capital_icon": "castle",
+ "neutral_color": "#a39d85",
+ "sea_wave": "#8fb3a6",
+ "ink": "#2b1a10",
  "nation_colors": {
-  "GB": "#7a2620",
-  "ES": "#c4501f",
-  "FR": "#2d3537",
-  "DE": "#5c3d25",
-  "AT": "#d5841f",
-  "IT": "#8fb12a",
-  "NA": "#5a2a2e"
+  "GB": "#a5322c",
+  "ES": "#d29b2b",
+  "FR": "#3f66a8",
+  "DE": "#585c63",
+  "AT": "#85508f",
+  "IT": "#5f9444",
+  "NA": "#c8703a"
  },
  "terrain": {
   "~~": {
-   "fill": "#3f7a68"
+   "fill": "#3d6670"
   },
   "##": {
-   "fill": "#2a1e17"
+   "fill": "#3a2c22"
   },
   "?SE": {
-   "fill": "#cfb196"
+   "fill": "#d9ca9f"
   },
   "?RU": {
-   "fill": "#4f1636"
+   "fill": "#6d3a4c"
   },
   "?TR": {
-   "fill": "#246a46"
+   "fill": "#2a5e5c"
   }
  },
  "textures": {}

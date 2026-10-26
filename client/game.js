@@ -3,6 +3,7 @@
 import * as R from './render.js';
 import * as O from './orders.js';
 import * as In from './input.js';
+import * as Chat from './chat.js';
 import { api } from './api.js';
 import { $, esc, ctx, setState, P, nName, pName, ownArmyAt } from './ctx.js';
 
@@ -12,6 +13,7 @@ const isField = x => Array.isArray(x) && x.length === 2 && typeof x[0] === 'numb
 export function startGame(gid, token) {
   ctx.gid = gid; ctx.token = token;
   O.init({ onChange: refresh, toast });
+  Chat.init({ toast, poll: () => poll(true) });
   In.init({ toast, onEscape: () => { if (replay) { replay = null; renderReplay(); } } });
   $('btn-ready').onclick = toggleReady;
   $('board').onclick = onBoardClick;
@@ -42,6 +44,7 @@ function apply(v) {
   R.drawMap(v);
   In.clearPreviews();
   refresh();
+  Chat.update();
 }
 
 function refresh() {
@@ -112,7 +115,7 @@ function renderBoard() {
     const form = sendTo !== r.player ? '' : maxSend < 1
       ? '<span class="pend bad">Kein Gold übrig</span>'
       : `<span class="sendform">Gold senden: <input id="b-amt" type="number" min="1" max="${maxSend}" value="1"> <button data-send="1">OK</button> <small>max. ${maxSend}</small></span>`;
-    h += `<tr data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}"><td><span class="sw" style="background:${R.colorOf(r.player)}"></span><b>${esc(r.name)}</b> <small>${esc(nName(r.player))}</small>${pend}${form}</td>` +
+    h += `<tr data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}"><td><span class="sw" style="background:${R.colorOf(r.player)}"></span><b>${esc(r.name)}</b> <small>${esc(nName(r.player))}</small>${r.player !== G.me ? ` <button class="gold-btn" data-gold="${r.player}" title="Gold senden">Gold</button>` : ''}${pend}${form}</td>` +
       `<td>${r.provinces}</td><td>${Math.round(r.share * 100)}</td><td>${r.income}</td><td>${r.upkeep}</td><td>${r.armies}</td><td>${r.divisions}</td></tr>`;
   }
   $('board').innerHTML = h;
@@ -138,8 +141,8 @@ function onBoardClick(e) {
   if (e.target.closest('.sendform')) return;
   const tr = e.target.closest('tr[data-p]');
   if (!tr || !ctx.G.me || tr.dataset.p === ctx.G.me) return;
-  sendTo = sendTo === tr.dataset.p ? null : tr.dataset.p;
-  renderBoard();
+  if (e.target.closest('[data-gold]')) { sendTo = sendTo === tr.dataset.p ? null : tr.dataset.p; renderBoard(); return; }
+  Chat.openChannel(tr.dataset.p);
 }
 
 // ---------- last turn replay ----------

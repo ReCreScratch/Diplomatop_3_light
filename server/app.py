@@ -69,6 +69,10 @@ def create_app(save_dir=None):
     def preview(gid: str, token: str = "", body: dict = Body(...)):
         return games.preview(gid, token, body)
 
+    @app.post("/api/games/{gid}/chat")
+    def chat(gid: str, token: str = "", body: dict = Body(...)):
+        return games.post_chat(gid, token, body.get("to"), body.get("text"), body.get("marks"))
+
     @app.get("/")
     def index():
         return FileResponse(ROOT / "client" / "index.html")

@@ -28,7 +28,9 @@ export function init(svgEl, handlers) {
     const m = mk('marker', { id: 'ah' + (err ? 'e' : ''), viewBox: '0 0 10 10', refX: 7, refY: 5, markerWidth: 4, markerHeight: 4, orient: 'auto' }, defs);
     mk('path', { d: 'M0 0L10 5L0 10z', class: 'arrowhead' + (err ? ' err' : '') }, m);
   }
-  for (const n of ['base', 'reach', 'hi', 'armies', 'orders', 'draft']) L[n] = mk('g', { id: 'l-' + n }, svg);
+  const mc = mk('marker', { id: 'ahc', viewBox: '0 0 10 10', refX: 7, refY: 5, markerWidth: 4, markerHeight: 4, orient: 'auto' }, defs);
+  mk('path', { d: 'M0 0L10 5L0 10z', class: 'arrowhead chat' }, mc);
+  for (const n of ['base', 'reach', 'hi', 'marks', 'armies', 'orders', 'draft']) L[n] = mk('g', { id: 'l-' + n }, svg);
   svg.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, moved: false }; });
   svg.addEventListener('pointermove', e => {
     if (down && e.buttons) {
@@ -89,19 +91,33 @@ export const onViewChange = fn => { viewHooks.push(fn); };
 const applyVb = () => { svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); viewHooks.forEach(fn => fn()); };
 const clear = g => { while (g.firstChild) g.removeChild(g.firstChild); };
 
+// Symbols and patterns (colours from theme.json): castle icon, sea waves.
+function buildDefs() {
+  const defs = svg.querySelector('defs');
+  defs.querySelectorAll('.themed').forEach(e => e.remove());
+  const ink = theme.ink || theme.hex_outline || '#222', sea = ((theme.terrain || {})['~~'] || {}).fill || '#356';
+  const pat = mk('pattern', { id: 'sea-pat', class: 'themed', width: 24, height: 14, patternUnits: 'userSpaceOnUse' }, defs);
+  mk('rect', { width: 24, height: 14, fill: sea }, pat);
+  mk('path', { d: 'M1 4Q4 1 7 4T13 4T19 4M13 11Q16 8 19 11T25 11M-5 11Q-2 8 1 11T7 11', fill: 'none', stroke: theme.sea_wave || '#fff', 'stroke-width': 0.9, 'stroke-opacity': 0.4, 'stroke-linecap': 'round' }, pat);
+  const sym = mk('symbol', { id: 'castle', class: 'themed', viewBox: '0 0 24 24' }, defs);
+  mk('path', { d: 'M3 21V9h3V6h2v3h2V6h4v3h2V6h2v3h3v12z M10 21v-5a2 2 0 0 1 4 0v5z', fill: '#efe0b4', stroke: ink, 'stroke-width': 1.6, 'stroke-linejoin': 'round', 'fill-rule': 'evenodd' }, sym);
+  mk('path', { d: 'M12 6V1.5l4 1.5-4 1.5', fill: '#8c2a1e', stroke: ink, 'stroke-width': 1, 'stroke-linejoin': 'round' }, sym);
+}
+
 function buildBase(state) {
+  buildDefs();
   clear(L.base); polys = {};
   const grid = rows = parseGrid(state.map.grid), P = state.map.provinces;
-  const border = mk('path', { class: 'border', stroke: theme.province_border || '#fff', 'stroke-width': 2 }, null);
+  const border = mk('path', { class: 'border', stroke: theme.province_border || '#fff', 'stroke-width': 2.4, 'stroke-opacity': 0.85 }, null);
   let d = '', maxc = 0, maxr = 0;
   const pb = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
   grid.forEach((row, r) => row.forEach((tok, c) => {
     if (tok === '..') return;
     maxc = Math.max(maxc, c); maxr = Math.max(maxr, r);
     const { x, y } = centre([c, r]);
-    const poly = mk('polygon', { points: hexPts(x, y), stroke: theme.hex_outline || '#000', 'stroke-width': 0.5 }, L.base);
+    const poly = mk('polygon', { points: hexPts(x, y), stroke: theme.hex_outline || '#000', 'stroke-width': 0.5, 'stroke-opacity': P[tok] ? 0.22 : 0.08, class: P[tok] ? 'land' : 'terr' }, L.base);
     if (P[tok]) (polys[tok] = polys[tok] || []).push(poly);
-    else poly.setAttribute('fill', ((theme.terrain || {})[tok] || {}).fill || '#444');
+    else poly.setAttribute('fill', tok === '~~' ? 'url(#sea-pat)' : ((theme.terrain || {})[tok] || {}).fill || '#444');
     if (!P[tok]) return;
     pb.x0 = Math.min(pb.x0, x); pb.y0 = Math.min(pb.y0, y); pb.x1 = Math.max(pb.x1, x); pb.y1 = Math.max(pb.y1, y);
     for (const n of neighbours(c, r)) {
@@ -116,7 +132,9 @@ function buildBase(state) {
   border.setAttribute('d', d); L.base.appendChild(border);
   for (const p of Object.values(P)) {
     const { x, y } = centre(p.capital);
-    const t = txt(L.base, x, y - S * 0.3, theme.capital_icon || '*', 'cap');
+    let t;
+    if (theme.capital_icon === 'castle') t = mk('use', { href: '#castle', x: x - 8, y: y - S * 0.3 - 10, width: 16, height: 16, class: 'cap' }, L.base);
+    else t = txt(L.base, x, y - S * 0.3, theme.capital_icon || '*', 'cap');
     const ti = mk('title', {}, t); ti.textContent = p.capital_name;
   }
   full = { x: 0, y: 0, w: (maxc * 1.5 + 2) * S, h: (maxr + 1.5) * SQ3 * S + S };
@@ -139,13 +157,20 @@ export function drawMap(state) {
   for (const a of Object.values(state.armies)) {
     const { x, y } = centre(a.field), yy = y + (capSet.has(a.field.join()) ? S * 0.35 : 0);
     const fresh = a.fresh || 0, label = String(a.divisions - fresh) + (fresh ? '+' + fresh : '');
-    const w = label.length * 7 + 10;
-    mk('rect', { x: x - w / 2, y: yy - 7, width: w, height: 14, rx: 4, fill: colorOf(a.owner), class: 'badge' }, L.armies);
-    const t = txt(L.armies, x, yy, '', '');
-    t.setAttribute('font-size', 11);
+    // light parchment shield with a band in the owner's colour, so it stands out on its own land
+    const w = Math.max(24, label.length * 9 + 12), l = x - w / 2, r = x + w / 2, t0 = yy - 13;
+    const sh = `M${l} ${t0}H${r}V${yy + 3}Q${r} ${yy + 9} ${x} ${yy + 13}Q${l} ${yy + 9} ${l} ${yy + 3}Z`;
+    const g = mk('g', { class: 'army' + (fresh ? ' has-fresh' : ''), 'data-army': a.id }, L.armies);
+    mk('path', { d: sh, class: 'badge-rim' }, g);
+    mk('path', { d: sh, class: 'badge' }, g);
+    mk('rect', { x: l, y: t0, width: w, height: 6, fill: colorOf(a.owner), class: 'badge-chief' }, g);
+    const t = txt(g, x, yy + 2, '', 'divs');
     const s1 = mk('tspan', {}, t); s1.textContent = String(a.divisions - fresh);
     if (fresh) { const s2 = mk('tspan', { class: 'fresh' }, t); s2.textContent = '+' + fresh; }
-    if (a.forced_march) txt(L.armies, x - w / 2 - 3, yy, '»', 'fmflag');
+    if (a.forced_march) {
+      mk('circle', { cx: l - 1, cy: t0 + 3, r: 6, class: 'fmseal' }, g);
+      txt(g, l - 1, t0 + 3, '»', 'fmflag');
+    }
   }
 }
 
@@ -155,8 +180,8 @@ export function showArrows(orders, errors, state) {
   let seq = 0; const stack = {};
   const marker = (idx, x, y, s, errs, title) => {
     const g = mk('g', { class: 'mk' + (errs.length ? ' err' : ''), 'data-idx': idx, 'data-ord': idx }, L.orders);
-    const w = s.length * 6 + 8;
-    mk('rect', { x: x - w / 2, y: y - 7, width: w, height: 14, rx: 4 }, g);
+    const w = Math.max(16, s.length * 6.5 + 9);
+    mk('rect', { x: x - w / 2, y: y - 8, width: w, height: 16, rx: 8 }, g);
     txt(g, x, y, s, '');
     const ti = mk('title', {}, g);
     ti.textContent = (title || '') + (errs.length ? '\n' + errs.join('\n') : '') + '\n(Klick: Befehl löschen)';
@@ -217,4 +242,24 @@ export function highlight(fields, kind = 'sel') {
 }
 export function clearHighlight(prefix = '') {
   [...L.hi.children].forEach(e => { if (e.dataset.kind.startsWith(prefix)) e.remove(); });
+}
+
+// Chat references on the map. marks = [{kind: 'field', f} | {kind: 'arrow', path: [f, ...]}];
+// cls is a CSS class for the look (e.g. 'chat', 'chat-flash'). Empty/null clears that class.
+export function showMarks(marks, cls = 'chat') {
+  [...L.marks.children].forEach(e => { if (e.dataset.cls === cls) e.remove(); });
+  for (const m of marks || []) {
+    if (m.kind === 'field') {
+      const { x, y } = centre(m.f);
+      mk('polygon', { points: hexPts(x, y), class: 'mark ' + cls, 'data-cls': cls }, L.marks);
+    } else if (m.kind === 'arrow' && m.path && m.path.length > 1) {
+      const ps = m.path.map(centre).map(p => p.x + ',' + p.y).join(' ');
+      mk('polyline', { points: ps, class: 'mark-arrow ' + cls, 'data-cls': cls, 'marker-end': 'url(#ahc)' }, L.marks);
+    }
+  }
+}
+// Centre the view on a field (zoom unchanged).
+export function panTo(f) {
+  const { x, y } = centre(f);
+  vb.x = x - vb.w / 2; vb.y = y - vb.h / 2; applyVb();
 }

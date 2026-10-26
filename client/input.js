@@ -1,6 +1,7 @@
 // Map interaction: selection, floating toolbar, reach highlight, one-click moves, hotkeys, context menu, tooltip.
 import * as R from './render.js';
 import * as O from './orders.js';
+import * as Chat from './chat.js';
 import { api } from './api.js';
 import { neighbours, key } from './hex.js';
 import { $, esc, same, ctx, rules, P, tokenAt, passable, armyAt, ownArmyAt, isEnemyAt, ownCapitalAt, nName, pName } from './ctx.js';
@@ -18,6 +19,8 @@ export function init(h) {
   R.onViewChange(() => { place(); hideMenu(); });
   $('toolbar').onclick = e => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) act(b.dataset.act); };
   $('ctxmenu').onclick = e => {
+    const w = e.target.closest('[data-msg]');
+    if (w) { hideMenu(); Chat.openChannel(w.dataset.msg, w.dataset.f.split(',').map(Number)); return; }
     const b = e.target.closest('[data-to]'); if (!b) return;
     O.add({ type: 'give_province', province: b.dataset.prov, to: b.dataset.to }); hideMenu();
   };
@@ -94,6 +97,7 @@ const reachable = f => !!reach && reach.kind.has(key(f));
 function onField(f, e) {
   hideMenu();
   if (!ctx.G.me) return;
+  if ((e && e.altKey) || Chat.pinning()) { Chat.toggleMark(f); return; }   // chat reference instead of orders
   if (reachable(f)) {
     const path = pathTo(f);
     if (e && e.shiftKey && reach.kind.get(key(f)) === 'go') {   // detour waypoint
@@ -109,10 +113,13 @@ function onField(f, e) {
 function onContext(f) {
   hideMenu();
   const tok = f && tokenAt(f), prov = tok && P()[tok], others = Object.keys(ctx.G.players).filter(p => p !== ctx.G.me);
-  if (prov && ctx.G.owners[tok] === ctx.G.me && others.length && !O.gifted(tok)) {
+  const give = prov && ctx.G.owners[tok] === ctx.G.me && others.length && !O.gifted(tok);
+  const a = f && armyAt(f), talk = f ? [...new Set([prov && ctx.G.owners[tok], a && a.owner])].filter(p => p && p !== ctx.G.me && ctx.G.players[p]) : [];
+  if (give || talk.length) {
     const m = $('ctxmenu');
-    m.innerHTML = `<div>Provinz ${esc(prov.name)} verschenken an:</div>` +
-      others.map(p => `<button data-prov="${esc(tok)}" data-to="${esc(p)}">${esc(pName(p))}</button>`).join('');
+    m.innerHTML = (give ? `<div>Provinz ${esc(prov.name)} verschenken an:</div>` +
+      others.map(p => `<button data-prov="${esc(tok)}" data-to="${esc(p)}">${esc(pName(p))}</button>`).join('') : '') +
+      talk.map(p => `<button data-msg="${esc(p)}" data-f="${f[0]},${f[1]}">✉ Nachricht an ${esc(pName(p))}</button>`).join('');
     const s = R.fieldToScreen(f);
     m.style.left = s.x + 'px'; m.style.top = s.y + 'px'; m.hidden = false;
   } else if (sel) select(null);
@@ -158,9 +165,10 @@ function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (k === 'Tab') { e.preventDefault(); cycle(e.shiftKey ? -1 : 1); }
   else if (k === 'Escape') {
-    if (draft) { draft = null; update(); } else if (sel) select(null); else hooks.onEscape();
+    if (Chat.cancelPin()) { /* pin mode off */ } else if (draft) { draft = null; update(); } else if (sel) select(null); else hooks.onEscape();
     hideMenu();
-  } else if (!sel) return;
+  } else if (k === 'Enter' && !sel && e.target === document.body) { e.preventDefault(); Chat.focusInput(); }
+  else if (!sel) return;
   else if (k === '+' || k === '=') step(1);
   else if (k === '-') step(-1);
   else if (/^[0-9]$/.test(k)) {   // a second digit within 0.7 s makes a two-digit number

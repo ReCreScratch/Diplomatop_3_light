@@ -102,6 +102,7 @@ Based on the current board (ignores other orders).
 | `PUT /api/games/{gid}/orders?token=` | `{orders: [...]}` replaces own list → `{errors: [[...], ...]}` |
 | `POST /api/games/{gid}/ready?token=` | `{ready: bool}` → `{ok: true}` |
 | `POST /api/games/{gid}/preview?token=` | `{army, count, path, forced_march?}` (setting after pending toggle) → preview_move result |
+| `POST /api/games/{gid}/chat?token=` | `{to: nation\|null, text, marks?: [{kind:"field", f:[c,r]} \| {kind:"arrow", path:[[c,r],...]}]}` → `{ok, message}`. `to: null` = public channel. Running game only. |
 
 State view:
 ```json
@@ -111,8 +112,14 @@ State view:
  "map": {...}, "theme": {...theme.json...}, "owners": {...}, "armies": {...},
  "board": [...], "my_orders": [...], "order_errors": [[...]],
  "incoming": [{"type": "send_gold", "from": "FR", "amount": 5}],
- "last_turn": {"turn": 2, "events": [...]}}
+ "last_turn": {"turn": 2, "events": [...]},
+ "chat": [{"id": 4, "from": "FR", "to": null, "text": "Hallo", "marks": [{"kind": "field", "f": [3, 4]}], "turn": 2, "ts": 1760000000}]}
 ```
+`chat` holds the public messages (`to: null`) plus private ones where the caller is sender or receiver, oldest first
+(`id` increases per game). Other players' private messages are never sent. Chat limits (server/games.py):
+`CHAT_MAX_LEN` 1000 characters, `CHAT_MAX_MARKS` 20 marks; text may be empty if there is at least one mark;
+fields must lie inside the grid; `to` must be another joined player. Chat is stored in `saves/{gid}.json`
+and bumps `version`.
 `my_recruit_limit` (= `recruit_limit_per_province` × own provinces at turn start) is also in the view.
 While `status == "lobby"`, `GET state` returns only `{changed, version, status}`; the client uses `/lobby` there.
 Errors: HTTP 400 (bad input), 403 (wrong token / not host), 404 (unknown game), body `{"detail": "German text"}`.

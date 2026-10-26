@@ -24,5 +24,6 @@ export const api = {
   state: (id, tok, since) => call('GET', `${g(id)}/state${t(tok)}${since != null ? '&since=' + since : ''}`),
   putOrders: (id, tok, orders) => call('PUT', `${g(id)}/orders${t(tok)}`, { orders }),
   ready: (id, tok, ready) => call('POST', `${g(id)}/ready${t(tok)}`, { ready }),
+  chat: (id, tok, body) => call('POST', `${g(id)}/chat${t(tok)}`, body),
   preview: (id, tok, body) => call('POST', `${g(id)}/preview${t(tok)}`, body),
 };

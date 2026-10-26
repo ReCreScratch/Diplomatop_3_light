@@ -23,6 +23,12 @@ export const isEnemyAt = f => { const a = armyAt(f); return !!a && a.owner !== c
 export const movable = a => rules().recruits_can_move_same_turn ? a.divisions : a.divisions - (a.fresh || 0);
 export const pName = pid => (ctx.G.players[pid] && ctx.G.players[pid].name) || pid;
 export const nName = pid => (ctx.G.map.nations[pid] && ctx.G.map.nations[pid].name) || pid;
+// readable field name for chat chips: capital name, else province + coordinates
+export const fieldName = f => {
+  const p = P()[tokenAt(f)];
+  if (!p) return tokenAt(f) === '~~' ? `Meer ${f[0]},${f[1]}` : `Feld ${f[0]},${f[1]}`;
+  return same(p.capital, f) ? p.capital_name : `${p.name} ${f[0]},${f[1]}`;
+};
 // own province whose capital stands on field f (recruiting without an army there)
 export const ownCapitalAt = f => {
   const tok = tokenAt(f), p = P()[tok];

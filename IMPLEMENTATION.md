@@ -125,6 +125,24 @@ taken ones greyed with player name); live player list with host crown; "Link kop
 **Last turn:** step-by-step replay (◀ ▶) through the resolution in player order, highlighting each move, fight
 and conquest on the map, with a one-line text per step.
 
+### 3.4 Chat
+In-game diplomacy chat (`client/chat.js`, `client/chat.css`, server `POST /chat`, see API.md). Most diplomacy
+is meant to be secret, so the default is private two-player channels.
+- **Panel** at the top of the side column, collapsible, scrollable (max height). Channel chips: "Alle" (public) plus
+  one per other player (nation colour dot, name, unread badge). Own messages right-aligned, sender in nation colour,
+  turn number small. Enter sends, Shift+Enter newline. Unread = messages with id above the last seen id, kept in
+  `localStorage` per game.
+- **Map references:** Alt+click on a field toggles it as a mark on the draft; the pin button switches a pin mode
+  (every field click adds a mark until Esc / button). Draft marks are chips under the input (province + field name)
+  and drawn on the map. "Zug teilen" attaches own pending moves as arrow marks. "#" + letters autocompletes province
+  names (inserts the name, adds the capital as mark).
+- **Reading:** hovering a message draws its marks on the map; clicking a chip pans to the field and flashes it.
+- **New messages** from others: unread badge, a toast "Nachricht von X" if the channel is not open, and marks flash
+  on the map for about 4 s. Own messages and messages already present at page load never flash or toast.
+- **Quick access:** right-click on a foreign field -> "Nachricht an X" opens the channel with the field attached;
+  a click on a player's name in the board opens their channel (gold sending has its own small button);
+  Enter (nothing selected) focuses the chat input, Esc leaves it.
+
 ## 4. Maps and graphics
 
 ### 4.1 Map folder

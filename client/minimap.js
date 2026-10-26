@@ -36,8 +36,10 @@ export function thumbnail(map, theme, opts = {}) {
       else fill = (terr[k] || {}).fill || (k === '' ? theme.neutral_color : theme.background);
       paths[k].setAttribute('fill', fill || '#888');
       paths[k].setAttribute('opacity', nation && o.highlight && o.highlight !== k ? 0.35 : 1);
-      paths[k].setAttribute('stroke', nation && o.highlight === k ? theme.province_border || '#fff' : 'none');
-      paths[k].setAttribute('stroke-width', 1.5);
+      const hl = nation && o.highlight === k;
+      paths[k].setAttribute('stroke', hl ? '#f3d27a' : theme.ink || theme.hex_outline || 'none');
+      paths[k].setAttribute('stroke-opacity', hl ? 1 : 0.25);
+      paths[k].setAttribute('stroke-width', hl ? 2 : 0.5);
     }
   };
   svg.update(opts);

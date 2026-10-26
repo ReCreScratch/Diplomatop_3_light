@@ -13,6 +13,11 @@ ROOT = Path(__file__).resolve().parent.parent
 MAPS = ROOT / "maps"
 
 
+# Chat limits (technical safety caps, not gameplay rules)
+CHAT_MAX_LEN = 1000
+CHAT_MAX_MARKS = 20
+
+
 class ApiError(Exception):
     def __init__(self, status, detail):
         self.status, self.detail = status, detail
@@ -35,13 +40,14 @@ class Game:
         self.version = data["version"]
         self.last_turn = data["last_turn"]
         self.deadline = data["deadline"]        # epoch seconds or None
+        self.chat = data.get("chat", [])        # [{id, from, to, text, marks, turn, ts}]
         self.state = engine.GameState.from_dict(data["state"]) if data["state"] else None
 
     def to_dict(self):
         return {"id": self.id, "map": self.map, "overrides": self.overrides, "status": self.status,
                 "host_token": self.host_token, "tokens": self.tokens, "joined": self.joined,
                 "host": self.host, "orders": self.orders, "ready": self.ready, "version": self.version,
-                "last_turn": self.last_turn, "deadline": self.deadline,
+                "last_turn": self.last_turn, "deadline": self.deadline, "chat": self.chat,
                 "state": self.state.to_dict() if self.state else None}
 
 
@@ -93,7 +99,7 @@ class Games:
             game = Game({"id": gid, "map": map_name, "overrides": overrides or {}, "status": "lobby",
                          "host_token": secrets.token_urlsafe(16), "tokens": {}, "joined": {}, "host": None,
                          "orders": {}, "ready": {}, "version": 0, "last_turn": None, "deadline": None,
-                         "state": None})
+                         "chat": [], "state": None})
             self.games[gid] = game
             self._save(game)
             return {"game_id": gid, "host_token": game.host_token}
@@ -206,6 +212,7 @@ class Games:
                 "board": engine.board(st), "my_orders": my_orders,
                 "order_errors": engine.validate_orders(st, nation, my_orders),
                 "incoming": [], "last_turn": game.last_turn,
+                "chat": [m for m in game.chat if m["to"] is None or nation in (m["from"], m["to"])],
             }
 
     def put_orders(self, gid, token, orders):
@@ -235,3 +242,47 @@ class Games:
                                            body.get("forced_march"))
             except (KeyError, TypeError, ValueError):
                 raise ApiError(400, "Vorschau ungültig.")
+
+    # --- chat --------------------------------------------------------
+    def _clean_marks(self, game, marks):
+        if not isinstance(marks, list) or len(marks) > CHAT_MAX_MARKS:
+            raise ApiError(400, f"Höchstens {CHAT_MAX_MARKS} Markierungen pro Nachricht.")
+        cells = game.state.cells
+
+        def field(f):
+            ok = (isinstance(f, (list, tuple)) and len(f) == 2
+                  and all(isinstance(v, int) and not isinstance(v, bool) for v in f) and (f[0], f[1]) in cells)
+            if not ok:
+                raise ApiError(400, "Markierung liegt außerhalb der Karte.")
+            return [f[0], f[1]]
+
+        out = []
+        for m in marks:
+            kind = m.get("kind") if isinstance(m, dict) else None
+            if kind == "field":
+                out.append({"kind": "field", "f": field(m.get("f"))})
+            elif kind == "arrow":
+                path = m.get("path")
+                if not isinstance(path, list) or not 2 <= len(path) <= 40:
+                    raise ApiError(400, "Pfeil ungültig.")
+                out.append({"kind": "arrow", "path": [field(f) for f in path]})
+            else:
+                raise ApiError(400, "Markierung ungültig.")
+        return out
+
+    def post_chat(self, gid, token, to, text, marks):
+        with self.lock:
+            game, nation = self._running(gid, token)
+            if to is not None and (not isinstance(to, str) or to == nation or to not in game.joined):
+                raise ApiError(400, "Ungültiger Empfänger.")
+            text = text.strip() if isinstance(text, str) else ""
+            if len(text) > CHAT_MAX_LEN:
+                raise ApiError(400, f"Nachricht zu lang (höchstens {CHAT_MAX_LEN} Zeichen).")
+            marks = self._clean_marks(game, [] if marks is None else marks)
+            if not text and not marks:
+                raise ApiError(400, "Nachricht ist leer.")
+            msg = {"id": (game.chat[-1]["id"] + 1) if game.chat else 1, "from": nation, "to": to,
+                   "text": text, "marks": marks, "turn": game.state.turn, "ts": int(time.time())}
+            game.chat.append(msg)
+            self._save(game)
+            return {"ok": True, "message": msg}

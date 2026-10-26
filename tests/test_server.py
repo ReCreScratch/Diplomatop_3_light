@@ -91,3 +91,38 @@ def test_timer_expiry(tmp_path):
     assert 0 < v["timer_remaining"] <= 60
     c.app.state.games.games[gid].deadline = 1
     assert c.get(f"/api/games/{gid}/state", params={"token": t}).json()["turn"] == 2
+
+
+def test_chat(tmp_path):
+    c = make(tmp_path)
+    gid, t1, t2 = setup_game(c)
+    t3 = c.post(f"/api/games/{gid}/join", json={"name": "Otto", "nation": "DE"}).json()["token"]
+    url = f"/api/games/{gid}/chat"
+    assert c.post(url, params={"token": t1}, json={"to": None, "text": "hi"}).status_code == 400  # not running
+    c.post(f"/api/games/{gid}/start", params={"token": t1})
+    st = lambda t: c.get(f"/api/games/{gid}/state", params={"token": t}).json()
+    assert st(t1)["chat"] == []
+    pub = c.post(url, params={"token": t1}, json={"to": None, "text": " Hallo "}).json()
+    assert pub["ok"] and pub["message"]["text"] == "Hallo" and pub["message"]["from"] == "GB"
+    mark = {"kind": "field", "f": [1, 1]}
+    arrow = {"kind": "arrow", "path": [[1, 1], [1, 2]]}
+    priv = c.post(url, params={"token": t1}, json={"to": "FR", "text": "geheim", "marks": [mark, arrow]}).json()
+    assert priv["message"]["id"] > pub["message"]["id"] and priv["message"]["marks"] == [mark, arrow]
+    assert [m["text"] for m in st(t1)["chat"]] == ["Hallo", "geheim"]
+    assert [m["text"] for m in st(t2)["chat"]] == ["Hallo", "geheim"]
+    assert [m["text"] for m in st(t3)["chat"]] == ["Hallo"]           # private stays secret
+    assert "geheim" not in c.get(f"/api/games/{gid}/state", params={"token": t3}).text
+    only_marks = c.post(url, params={"token": t2}, json={"to": "GB", "text": "  ", "marks": [mark]})
+    assert only_marks.status_code == 200
+    # validation
+    bad = [{"to": None, "text": " "}, {"to": "GB", "text": "x"}, {"to": "XX", "text": "x"},
+           {"to": None, "text": "x" * 1001}, {"to": None, "text": "x", "marks": [{"kind": "field", "f": [999, 1]}]},
+           {"to": None, "text": "x", "marks": [mark] * 21}, {"to": None, "text": "x", "marks": [{"kind": "zzz"}]},
+           {"to": None, "text": "x", "marks": [{"kind": "arrow", "path": [[1, 1]]}]}]
+    for body in bad:
+        r = c.post(url, params={"token": t1}, json=body)
+        assert r.status_code == 400 and r.json()["detail"], body
+    assert c.post(url, params={"token": "bad"}, json={"to": None, "text": "x"}).status_code == 403
+    # save/load keeps chat
+    before = st(t1)["chat"]
+    assert len(before) == 3 and make(tmp_path).get(f"/api/games/{gid}/state", params={"token": t1}).json()["chat"] == before
