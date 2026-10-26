@@ -111,6 +111,9 @@ Gold received during resolution (transfers, disband refunds) can be spent in the
 - Walking through own fields, neutral fields and enemy provinces is allowed *[decided, G12]*.
 - Entering a field with an **enemy army** starts a fight. The moving army stops there, even if it had range left *[decided, G14]*.
 - Allied armies never fight (alliances: later milestone).
+- When armies merge, the army that was already standing there keeps its forced-march setting *[default, G54]*.
+- Land armies move only over land fields with a province; sea and blocked land are impassable in milestone 1 *[default, G55]*.
+- Each army gets at most one move order per turn; a part split off cannot get further orders that turn *[default, G56]*.
 
 ## 6. Combat
 - Basic rule: **1 division kills 1 division**, no defender advantage.
@@ -128,6 +131,8 @@ Gold received during resolution (transfers, disband refunds) can be spent in the
 ## 7. Conquest
 - A province is conquered only by moving an army onto its **capital**.
 - Any defending army on the capital is fought first (section 6).
+- Conquest is tried only on the field where a move ends (end of the path, or the field of a fight that stopped it).
+  Capitals passed on the way are not conquered *[default, G57]*.
 - Then the attacker pays the **conquest cost**: divisions equal to the province's income value (× `conquest_cost_factor`, default 1).
   - The cost also applies to an empty capital *[default, G28]*.
   - If the attacker has exactly enough divisions, it pays them and the army disappears – the province is still conquered
@@ -188,6 +193,7 @@ one per player, anyone can end it), idle warning, surrender/spectator, kick. Sav
 | `forced_march_range` | 3 | fields per turn on forced march |
 | `forced_march_combat_value` | 0.5 | combat value on forced march |
 | `strength_rounding` | down | how `divisions × value` is rounded |
+| `min_strength` | 1 | lowest strength of an army that has divisions (G21) |
 | `combat_formula` | default | which combat module is used |
 | `conquest_cost_factor` | 1 | conquest cost = income × factor |
 | `conquest_allow_army_used_up` | true | exactly enough divisions is enough |
@@ -205,6 +211,8 @@ one per player, anyone can end it), idle warning, surrender/spectator, kick. Sav
 ## 14. Open questions
 
 **Milestone 1:** no open rule questions left (G50–G53 decided, see sections 4, 5 and 9).
+G54–G57 (merge flag, impassable sea, one move per army, conquest only at move end) are defaults set during
+implementation – object if they feel wrong.
 
 **Europa map** (`maps/europa/`, see IMPLEMENTATION.md section 4.3):
 | ID | Question | Current state |

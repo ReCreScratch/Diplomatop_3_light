@@ -1,0 +1,87 @@
+{
+ "name": "Test",
+ "version": 1,
+ "nations": {
+  "AA": {
+   "name": "Aland"
+  },
+  "BB": {
+   "name": "Bland"
+  },
+  "CC": {
+   "name": "Cland"
+  }
+ },
+ "provinces": {
+  "A1": {
+   "name": "Nordaland",
+   "capital_name": "Nordalandstadt",
+   "capital": [
+    0,
+    2
+   ],
+   "income": 3,
+   "owner": "AA"
+  },
+  "A2": {
+   "name": "Südaland",
+   "capital_name": "Südalandstadt",
+   "capital": [
+    2,
+    2
+   ],
+   "income": 1,
+   "owner": "AA"
+  },
+  "N1": {
+   "name": "Niemandsland",
+   "capital_name": "Niemandslandstadt",
+   "capital": [
+    3,
+    2
+   ],
+   "income": 2,
+   "owner": null
+  },
+  "B1": {
+   "name": "Ostbland",
+   "capital_name": "Ostblandstadt",
+   "capital": [
+    4,
+    2
+   ],
+   "income": 2,
+   "owner": "BB"
+  },
+  "B2": {
+   "name": "Westbland",
+   "capital_name": "Westblandstadt",
+   "capital": [
+    5,
+    2
+   ],
+   "income": 1,
+   "owner": "BB"
+  },
+  "C1": {
+   "name": "Cland",
+   "capital_name": "Clandstadt",
+   "capital": [
+    6,
+    2
+   ],
+   "income": 2,
+   "owner": "CC"
+  }
+ },
+ "grid": [
+  "~~ ~~ ~~ ~~ ~~ ~~ ~~ ~~",
+  "A1 A1 A2 N1 B1 B2 C1 C1",
+  "A1 A1 A2 N1 B1 B2 C1 C1",
+  "A1 A1 A2 N1 B1 B2 C1 C1",
+  "~~ ~~ ~~ ~~ ~~ ~~ ~~ ?SE",
+  "## ## ## ## ## ## ## ##"
+ ],
+ "start_armies": [],
+ "rules": {}
+}

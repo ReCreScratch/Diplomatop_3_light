@@ -133,8 +133,9 @@ the top-left token. Tokens:
 
 **Provinces:** `{"name", "capital_name", "capital": [c, r], "income", "owner"}`. Ports are added in milestone 2.
 
-The loader checks: every province is connected (islands may be separate fields of the same province),
-has exactly one capital inside it, and every owner exists.
+The loader checks: known tokens, every province has fields and its capital inside it, every owner exists,
+start armies stand on province fields. Connectivity is not checked, because provinces may have separate parts
+(islands, GB2, ES5). Start armies: `[{"owner", "field", "divisions"}]`.
 
 ### 4.2 Keeping graphics replaceable
 - The engine and `map.json` contain **no colours, sizes or images**. Nations and terrain are only IDs.
@@ -169,4 +170,5 @@ Milestone 1 build order: engine with tests on a tiny test map → server → cli
 ## 6. Before building starts
 - [x] User confirms or changes the small open defaults G50–G53 (RULES.md section 14)
 - [x] User provides the map picture → recreated as `maps/europa/` (open points M1–M6 in RULES.md)
-- [ ] User gives the go to start
+- [x] User gives the go to start
+- [x] Milestone 1 built (engine, server, client); 105 tests pass. Next: playtest online with friends.

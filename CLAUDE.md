@@ -5,7 +5,12 @@ Lightweight online prototype of Diplomatio, a hex-map diplomacy strategy game fo
 - **Rules:** [RULES.md](RULES.md) is the source of truth. Rules marked *[decided]* are settled with the user;
   *[default]* ones may still change. Gap IDs (G1 …) are kept for traceability.
 - **Plan:** [IMPLEMENTATION.md](IMPLEMENTATION.md) – tech stack, architecture, map format, UI, milestones.
+- **Interfaces:** [API.md](API.md) – engine functions, state/order/event shapes, HTTP endpoints.
 - **Sources:** `docs/` holds the original design documents (German).
+
+## Run
+- Server + client: `python -m uvicorn server.app:app --host 0.0.0.0 --port 8000`, then open http://localhost:8000
+- Tests: `python -m pytest -q`
 
 ## Principles
 - No gameplay number in code. Every value comes from the rules config (RULES.md section 13).
