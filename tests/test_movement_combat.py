@@ -480,7 +480,8 @@ def test_board_rows():
     state = make_game()
     put(state, "AA", A1_CAP, 6)
     row = engine.board(state)[0]
-    assert row == {"player": "AA", "name": "p_AA", "provinces": 2, "fields": 9, "share": 9 / 24, "income": 4,
+    assert row == {"player": "AA", "name": "p_AA", "provinces": 2, "fields": 9, "share": 9 / 24, "share_counted": 9 / 24,
+                   "alliance": None, "income": 4,
                    "upkeep": 1.5, "armies": 1, "divisions": 6, "ships": 0}
 
 

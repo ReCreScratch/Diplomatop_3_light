@@ -17,6 +17,7 @@ export function budget() {
   let recruits = 0, ships = 0, sent = 0;
   for (const o of book.list) {
     if (o.type === 'recruit') recruits += o.count; else if (o.type === 'build_ship') ships += o.count; else if (o.type === 'send_gold') sent += o.amount;
+    else if (o.type === 'buy') sent += (offerFor(o.province) || { price: 0 }).price;   // bought provinces are paid like sent gold
   }
   const gold = G.my_gold - recruits * r.division_cost - ships * r.ship_cost - sent, limit = G.my_recruit_limit ?? 0;
   const recLeft = Math.max(0, limit - recruits - ships);   // divisions and ships share the limit
@@ -64,6 +65,11 @@ export const marching = a => !!(a.route && a.route.length) && !moveOf(a.id) && !
 export const roundsLeft = a => Math.ceil(a.route.length / rangeOf(a));
 export const hasOrder = a => book.list.some(o => o.army === a.id);
 export const gifted = prov => book.list.some(o => o.type === 'give_province' && o.province === prov);
+export const offered = prov => book.list.some(o => o.type === 'offer_sale' && o.province === prov);
+// diplomacy: the offer / invitation made to me last turn (server view), and my pending order of a kind
+export const offerFor = prov => ((ctx.G.offers || {}).incoming || []).find(o => o.province === prov) || null;
+export const pendingOrder = (type, pred = () => true) => book.list.find(o => o.type === type && pred(o)) || null;
+const SINGLE = { no_attack: o => o.to, invite: o => o.to, accept: () => '', leave: () => '', offer_sale: o => o.province, buy: o => o.province };
 
 // ---------- changing the list ----------
 function commit(mutate) {   // mutate() may return the order the server should vet
@@ -75,6 +81,7 @@ export function add(o) {
   const L = book.list;
   const merge = (type, same) => L.find(x => x.type === type && same(x));
   commit(() => {
+    if (SINGLE[o.type]) book.list = book.list.filter(x => !(x.type === o.type && SINGLE[o.type](x) === SINGLE[o.type](o)));   // a new one replaces the old
     const m = o.type === 'move' ? merge('move', x => x.army === o.army && JSON.stringify(x.path) === JSON.stringify(o.path))
       : o.type === 'recruit' || o.type === 'build_ship' ? merge(o.type, x => x.field[0] === o.field[0] && x.field[1] === o.field[1])
       : o.type === 'disband' ? merge('disband', x => x.army === o.army)
@@ -140,6 +147,12 @@ export function describe(o) {
     case 'forced_march': return `Gewaltmarsch ${o.on ? 'an' : 'aus'} (${army ? pn(army.field) : o.army})`;
     case 'send_gold': return `${o.amount} Gold an ${pName(o.to)}`;
     case 'give_province': return `Provinz ${(P()[o.province] || {}).name || o.province} an ${pName(o.to)}`;
+    case 'no_attack': return o.on ? `Nicht angreifen: ${pName(o.to)}` : `Angriffsverzicht gegenüber ${pName(o.to)} zurücknehmen`;
+    case 'invite': return `Bündnis anbieten: ${pName(o.to)}`;
+    case 'accept': return `Bündnis annehmen: ${pName(o.from)}`;
+    case 'leave': return 'Aus dem Bündnis austreten';
+    case 'offer_sale': return `Provinz ${(P()[o.province] || {}).name || o.province} verkaufen an ${pName(o.to)} für ${o.price} Gold`;
+    case 'buy': { const sale = offerFor(o.province); return `Provinz ${(P()[o.province] || {}).name || o.province} kaufen${sale ? ` von ${pName(sale.from)} für ${sale.price} Gold` : ''}`; }
   }
   return o.type;
 }

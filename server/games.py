@@ -181,15 +181,33 @@ class Games:
         events = engine.resolve_turn(game.state, game.orders)
         game.last_turn = {"turn": turn, "events": events, "before": before, "player_order": order}
         self._begin_turn(game)
+        if game.state.winner:   # victory: nothing is resolved any more
+            game.status, game.deadline = "finished", None
         self._save(game)
 
-    def _running(self, gid, token):
+    def _running(self, gid, token, finished_ok=False):
         game = self.get(gid)
         nation = self._nation(game, token)
         self._check_timer(game)
+        if game.status == "finished" and finished_ok:
+            return game, nation
+        if game.status == "finished":
+            raise ApiError(400, "Das Spiel ist beendet.")
         if game.status != "running":
             raise ApiError(400, "Das Spiel läuft noch nicht.")
         return game, nation
+
+    def _diplomacy_view(self, st, nation):
+        """Public alliances / do-not-attack marks and the caller's own invitations and sale offers."""
+        offers = [o for o in st.offers if st.owners.get(o["province"]) == o["from"]]   # seller still owns it
+        return {
+            "alliances": st.alliances, "no_attack": st.no_attack,
+            "invitations": {"incoming": [i for i in st.invitations if i["to"] == nation],
+                            "outgoing": [i for i in st.invitations if i["from"] == nation]},
+            "offers": {"incoming": [o for o in offers if o["to"] == nation],
+                       "outgoing": [o for o in offers if o["from"] == nation]},
+            "victory": {"leader": st.victory, "need": st.rules["victory_hold_turns"]}, "winner": st.winner,
+        }
 
     def view(self, gid, token, since):
         with self.lock:
@@ -217,7 +235,7 @@ class Games:
                            for i, a in st.armies.items()},   # foreign routes are secret
                 "board": engine.board(st), "my_orders": my_orders,
                 "order_errors": engine.validate_orders(st, nation, my_orders),
-                "incoming": [], "last_turn": game.last_turn,
+                "incoming": [], "last_turn": game.last_turn, **self._diplomacy_view(st, nation),
                 "chat": [m for m in game.chat if m["to"] is None or nation in (m["from"], m["to"])],
             }
 
@@ -278,7 +296,7 @@ class Games:
 
     def post_chat(self, gid, token, to, text, marks):
         with self.lock:
-            game, nation = self._running(gid, token)
+            game, nation = self._running(gid, token, finished_ok=True)
             if to is not None and (not isinstance(to, str) or to == nation or to not in game.joined):
                 raise ApiError(400, "Ungültiger Empfänger.")
             text = text.strip() if isinstance(text, str) else ""

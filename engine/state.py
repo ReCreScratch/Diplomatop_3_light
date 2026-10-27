@@ -1,7 +1,7 @@
 """GameState: plain data (JSON-safe dicts) plus small lookup helpers."""
 import copy
 
-from .config import SEA_TOKEN
+from .config import SEA_TOKEN, fill_defaults
 from .hexgrid import is_adjacent, parse_grid, tup
 
 PLAYER_KEYS = ("name", "gold", "provinces_at_turn_start")
@@ -12,7 +12,7 @@ class GameState:
     unit is a key of rules['unit_types'] (division or ship); for a fleet, 'divisions' counts its ships."""
 
     def __init__(self, turn, seed, rules, map, players, owners, armies, next_army_id,
-                 player_order, prev_player_order, gifts):
+                 player_order, prev_player_order, gifts, diplomacy=None):
         self.turn = turn
         self.seed = seed
         self.rules = rules
@@ -24,6 +24,15 @@ class GameState:
         self.player_order = player_order
         self.prev_player_order = prev_player_order
         self.gifts = gifts
+        d = diplomacy or {}   # milestone 3 state; saves from before it have none of these keys
+        self.alliances = d.get("alliances", {})          # id -> {id, members, since}
+        self.next_alliance_id = d.get("next_alliance_id", 1)
+        self.no_attack = d.get("no_attack", {})          # player -> [players he will not attack]
+        self.invitations = d.get("invitations", [])      # [{from, to, turn}], valid in the turn after `turn`
+        self.offers = d.get("offers", [])                # [{province, from, to, price, turn}], same
+        self.victory = d.get("victory")                  # running candidate {kind, id, players, turns} or None
+        self.winner = d.get("winner")                    # {players, alliance, turn} once the game is won
+        self.leaving = []                                # members who leave at the end of this resolution (transient)
         self.cells = parse_grid(map["grid"])  # derived, not saved
         self.ports = {tup(f): code for code, p in map["provinces"].items() for f in p.get("ports", [])}
 
@@ -35,14 +44,18 @@ class GameState:
             "players": self.players, "owners": self.owners, "armies": self.armies,
             "next_army_id": self.next_army_id, "player_order": self.player_order,
             "prev_player_order": self.prev_player_order, "gifts": self.gifts,
+            "alliances": self.alliances, "next_alliance_id": self.next_alliance_id, "no_attack": self.no_attack,
+            "invitations": self.invitations, "offers": self.offers, "victory": self.victory, "winner": self.winner,
         })
 
     @classmethod
     def from_dict(cls, data):
         """Inverse of to_dict."""
         d = copy.deepcopy(data)
-        return cls(d["turn"], d["seed"], d["rules"], d["map"], d["players"], d["owners"],
-                   d["armies"], d["next_army_id"], d["player_order"], d["prev_player_order"], d["gifts"])
+        old = "alliances" not in d   # a save from before milestone 3 gets the new settings and the diplomacy phase
+        rules = fill_defaults(d["rules"], diplomacy_phase=old)
+        return cls(d["turn"], d["seed"], rules, d["map"], d["players"], d["owners"],
+                   d["armies"], d["next_army_id"], d["player_order"], d["prev_player_order"], d["gifts"], d)
 
     # --- map lookups -------------------------------------------------
     def province_at(self, field):
@@ -95,7 +108,8 @@ class GameState:
 
     # --- units -------------------------------------------------------
     def units_at(self, field):
-        """All units on a field, fleets first. Land: at most one army. Sea: one fleet and one army per player."""
+        """All units on a field, fleets first. Land: at most one army. Sea: one fleet and one army per player
+        (allies may share a sea field)."""
         units = [a for a in self.armies.values() if tup(a["field"]) == tup(field)]
         return sorted(units, key=lambda a: not self.is_fleet(a))
 
@@ -112,14 +126,47 @@ class GameState:
                 return army
         return None
 
-    def enemy_units_at(self, field, player):
-        """Units of other players on field, fleets first."""
-        return [a for a in self.units_at(field) if a["owner"] != player]
+    # --- diplomacy ---------------------------------------------------
+    def alliance_of(self, player):
+        """The alliance record the player is a member of, or None."""
+        return next((a for a in self.alliances.values() if player in a["members"]), None)
 
-    def enemy_army_at(self, field, player):
-        """First unit of another player on field, or None."""
-        enemies = self.enemy_units_at(field, player)
-        return enemies[0] if enemies else None
+    def allied(self, a, b):
+        """Two different players in the same alliance."""
+        alliance = self.alliance_of(a) if a != b and a is not None and b is not None else None
+        return bool(alliance) and b in alliance["members"]
+
+    def hostile(self, a, b):
+        """Units and cities of a and b are enemies (RULES.md 11.1): not the same player, not allied and not
+        both on 'do not attack'. None (neutral / AI province owner) is hostile to everyone."""
+        if a is None or b is None:
+            return True
+        if a == b or self.allied(a, b):
+            return False
+        return not (b in self.no_attack.get(a, ()) and a in self.no_attack.get(b, ()))
+
+    def hostile_units_at(self, field, player):
+        """Units on field that player's units must fight, fleets first."""
+        return [a for a in self.units_at(field) if self.hostile(player, a["owner"])]
+
+    def hostile_army_at(self, field, player):
+        """First hostile unit on field, or None."""
+        units = self.hostile_units_at(field, player)
+        return units[0] if units else None
+
+    def blockers_at(self, field, player):
+        """Units of other, non-hostile players that stop player's units from ending a move on field
+        (passing through is fine). Allies may share a sea field (RULES.md 11.1)."""
+        sea = self.terrain_at(field) == "sea"
+        return [a for a in self.units_at(field) if a["owner"] != player and not self.hostile(player, a["owner"])
+                and not (sea and self.allied(player, a["owner"]))]
+
+    def free_steps(self, player, path):
+        """Length of the part of path (without the start field) that ends on a field player's units may end on."""
+        count = len(path)
+        while count and self.blockers_at(path[count - 1], player):
+            count -= 1
+        return count
 
     def new_army(self, owner, field, divisions, fresh=0, forced_march=False, unit=None):
         """Create a unit with the next free id."""

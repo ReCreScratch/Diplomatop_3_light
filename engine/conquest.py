@@ -6,9 +6,9 @@ from .events import make_event
 
 
 def conquest_target(state, field, player):
-    """Province code if field is a capital of a province not owned by player, else None."""
+    """Province code if field is the capital of a province with a hostile or neutral owner, else None."""
     code = state.is_capital(field)
-    if code and state.owners[code] != player:
+    if code and state.hostile(player, state.owners[code]):
         return code
     return None
 
@@ -41,6 +41,7 @@ def conquer(state, army, code, back_to, events):
         return False
     old_owner = state.owners[code]
     state.owners[code] = army["owner"]
+    state.gifts = [g for g in state.gifts if g["province"] != code]   # conquered provinces count at once (11.5)
     state.lose_divisions(army, cost)
     events.append(make_event("conquest", army["owner"],
                              (f"{name} erobert {prov} von {state.nation_name(old_owner)} (Kosten: {cost} Divisionen)." if old_owner

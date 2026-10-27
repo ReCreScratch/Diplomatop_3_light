@@ -35,14 +35,14 @@ def split_off(state, army, count):
 
 
 def walk(state, mover, path):
-    """Follow the path until its end or enemy units. Returns (fields walked, field before the last, enemies)."""
+    """Follow the path until its end or hostile units. Returns (fields walked, field before the last, enemies)."""
     current = tup(mover["field"])
     back_to = current
     walked = []
     for step in path:
         back_to, current = current, tup(step)
         walked.append(list(step))
-        enemies = state.enemy_units_at(step, mover["owner"])
+        enemies = state.hostile_units_at(step, mover["owner"])
         if enemies:
             return walked, back_to, enemies
     return walked, back_to, []
@@ -84,22 +84,37 @@ def move_text(state, mover, count, target, auto, partner):
 def execute_move(state, army, count, path, events, rest=(), auto=False, group=False):
     """One move: split, walk, fight, conquer, merge. Everything is checked against the current state.
     group: the linked partner moves along (whole units). rest = route fields beyond this turn's path; kept as
-    the unit's route unless the march ends (fight, conquest attempt, merge) (G58)."""
+    the unit's route unless the march ends (fight, conquest attempt, merge) (G58).
+    The move may not end on a field held by non-hostile foreign units: it stops on the last free field before it,
+    or does not start; the fields not walked stay in the route (RULES.md 11.1)."""
     player = army["owner"]
     start = list(army["field"])
+    walked, back_to, enemies = walk(state, army, path)
+    if not enemies:
+        free = state.free_steps(player, walked)
+        rest = ([list(f) for f in walked[free:]] + [list(f) for f in rest]) if state.rules["standing_marches"] else ()
+        walked = walked[:free]
+        back_to = tuple(walked[-2]) if len(walked) > 1 else tuple(start)
+        if not walked:   # nothing to do: the unit waits, a whole unit keeps its march
+            if rest and count >= army["divisions"]:
+                army["route"] = rest
+            events.append(make_event("move_blocked", player,
+                                     f"{state.nation_name(player)}: Zug bleibt stehen, das Ziel ist von fremden Truppen besetzt.",
+                                     army=army["id"], field=start))
+            return
     mover = split_off(state, army, count)
     partner = state.partner(mover) if group else None
     movers = [u for u in (partner, mover) if u]
     movers.sort(key=lambda u: not state.is_fleet(u))   # fleet first: it takes damage first
-    walked, back_to, enemies = walk(state, mover, path)
     target = walked[-1]
     events.append(make_event("move", player, move_text(state, mover, count, target, auto, partner),
                              army=mover["id"], **{"from": start}, path=walked, to=target, count=count,
                              **({"with": partner["id"]} if partner else {}), **({"auto": True} if auto else {})))
     if enemies:
         at_sea = state.terrain_at(start) == "sea" or state.terrain_at(target) == "sea"
-        if fight(state, movers, enemies, target, at_sea, events) != player:
-            for unit in movers:   # both sides survived: the attackers stay where they came from (G59)
+        won = fight(state, movers, enemies, target, at_sea, events) == player
+        if not won or state.blockers_at(target, player):
+            for unit in movers:   # both sides survived, or the field is still held by others: stay where they came from (G59)
                 if unit["id"] in state.armies:
                     merge_standing(state, unit, events)
             return

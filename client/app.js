@@ -22,9 +22,9 @@ async function route() {
   try { lobby = await api.lobby(gid, token); } catch (e) { show('screen-start'); msg('st-msg', 'Spiel nicht gefunden: ' + e.message, true); return startScreen(true); }
   if (token) {
     if (!q.get('token')) history.replaceState(null, '', `?game=${encodeURIComponent(gid)}&token=${encodeURIComponent(token)}`);
-    return lobby.status === 'running' ? gameScreen() : lobbyScreen(lobby);
+    return lobby.status !== 'lobby' ? gameScreen() : lobbyScreen(lobby);
   }
-  if (lobby.status === 'running') { show('screen-start'); msg('st-msg', 'Das Spiel läuft bereits.', true); return startScreen(true); }
+  if (lobby.status !== 'lobby') { show('screen-start'); msg('st-msg', 'Das Spiel läuft bereits.', true); return startScreen(true); }
   joinScreen(lobby);
 }
 
@@ -139,7 +139,7 @@ function lobbyScreen(first) {
     try {
       const l = await api.lobby(gid, token);
       if (l.is_host !== undefined) { isHost = l.is_host; setHostUi(); }
-      if (l.status === 'running') return gameScreen();
+      if (l.status !== 'lobby') return gameScreen();
       if (!ctx) {
         ctx = await loadMap(l.map);
         mini = thumbnail(ctx.map, ctx.theme, { joined: [] });

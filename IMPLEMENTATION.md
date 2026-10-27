@@ -40,9 +40,13 @@ diplomatio/
       recruitment.py
       gold.py             income, upkeep, gold transfers and province gifts
       movement.py         moves, calls combat and conquest
+      diplomacy.py        do-not-attack, alliances, sale offers; end of resolution: leaves, expiry, victory check
     combat.py             combat formula interface + default formula
     conquest.py
     turn_order.py         turn-order rule interface + default rule
+    alliances.py          alliance records: found, join, leave
+    diplomacy_orders.py   no_attack, invite, accept, leave, offer_sale, buy (registered via orders.py)
+    victory.py            land-field shares, gift delay, alliance age, hold counter
     resolve.py            runs the phase pipeline
   server/
     app.py                HTTP endpoints
@@ -63,7 +67,7 @@ diplomatio/
   class with `validate(state, player)` and `apply(state)`. A new order type (e.g. "build fleet") is a new class
   registered by name; the server and the client order list handle it generically.
 - **Phase pipeline:** resolution is a list of phase names in the config, e.g.
-  `["recruitment", "gold", "movement"]`. Each phase takes the orders of its kind and runs them in player order.
+  `["diplomacy", "recruitment", "gold", "movement"]`. Each phase takes the orders of its kind and runs them in player order.
   New mechanics add a phase or hook into an existing one.
 - **Swappable rules:** combat formula and turn-order rule are chosen by name from a registry
   (`combat_formula: "hp_attrition"`, `turn_order_rule: "no_repeat_position"`). A new variant is one new function.
@@ -121,6 +125,12 @@ for actions. Nothing illegal can be entered.
   Right-click on an own province opens a small on-map menu "Provinz verschenken an …" – the only menu.
 - Own orders are drawn on the map: numbered move arrows with division count, "+3" recruit and "−2" disband
   markers, forced-march marker. Freshly recruited divisions are shown as not movable.
+
+**Diplomacy (milestone 3):** under every other player's board row a line of buttons: "Nicht angreifen" (toggle, shows
+mutual state), "Bündnis anbieten", "Annehmen" (when invited), "Austreten" (own alliance) and "Kaufen" for sale offers;
+a button toggles its pending order. Selling is in the province context menu (price field + buyer). The board shows
+alliance membership and the share as "counted % (real %)"; the top bar shows the victory countdown, a banner the winner.
+The client mirrors the pass-through rule (`blocksEndAt`, `isEnemyAt` are hostility-aware in `client/ctx.js`).
 
 **Top bar:** turn number, timer, player order with ready marks, gold → gold after orders, recruits left, order
 summary, Ready button.
@@ -215,3 +225,5 @@ Milestone 1 build order: engine with tests on a tiny test map → server → cli
 - [x] Milestone 1 built (engine, server, client); 105 tests pass. Next: playtest online with friends.
 - [x] Rules reworked for Diplomatio 4.0 (RULES.md).
 - [x] Milestone 2 built: ports, ships, armies at sea, linking, sea combat; 160 tests pass.
+- [x] Milestone 3 built: diplomacy phase (do-not-attack, alliances, sale offers), hostility and pass-through,
+  victory check with game end, diplomacy UI on the board; 203 tests pass.

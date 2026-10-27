@@ -243,7 +243,7 @@ async function playGroup(g, board) {
         if (A[e.army]) { A[e.army].forced_march = e.on; redraw(e.army); await R.effect(A[e.army].field, 'march', e.on ? '»' : '»×', dur(600)); }
         break;
       }
-      case 'give_province': {
+      case 'give_province': case 'buy': {   // buy: e.to is the buyer
         const p = P()[e.province];
         if (p) await panFor([p.capital]);
         board.owners[e.province] = e.to;
@@ -251,7 +251,13 @@ async function playGroup(g, board) {
         await R.setProvinceFill(e.province, e.to, dur(1000));
         break;
       }
-      default: // send_gold, skipped, ...: caption only
+      case 'alliance': case 'alliance_end': case 'victory': {   // diplomacy news: caption plus a short banner toast
+        const t = showToast(esc(e.text), 1800);
+        t.catch(() => {});
+        await t;
+        break;
+      }
+      default: // send_gold, no_attack, leave, move_blocked, victory_progress, skipped, ...: caption only
         await ms(e.kind === 'skipped' ? 600 : 1100);
     }
   }

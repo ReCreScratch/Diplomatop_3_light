@@ -4,7 +4,7 @@ import * as O from './orders.js';
 import * as Chat from './chat.js';
 import { api } from './api.js';
 import { neighbours, key } from './hex.js';
-import { $, esc, same, ctx, rules, P, tokenAt, passable, armyAt, unitsAt, ownUnitsAt, isEnemyAt, ownCapitalAt, nName, pName, fieldName,
+import { $, esc, same, ctx, rules, P, tokenAt, passable, armyAt, unitsAt, ownUnitsAt, isEnemyAt, blocksEndAt, ownCapitalAt, nName, pName, fieldName,
   isFleet, isSea, isOwnPort, nextToOwnPort, canStep } from './ctx.js';
 
 let hooks = { toast() {}, onEscape() {} };
@@ -22,6 +22,12 @@ export function init(h) {
   $('ctxmenu').onclick = e => {
     const w = e.target.closest('[data-msg]');
     if (w) { hideMenu(); Chat.openChannel(w.dataset.msg, w.dataset.f.split(',').map(Number)); return; }
+    const s = e.target.closest('[data-sell]');
+    if (s) {   // sell: price from the number field in the menu, buyer from the button
+      const price = Math.floor(+$('sell-price').value);
+      if (!(price >= 1)) { hooks.toast('Bitte einen Preis eingeben.'); return; }
+      O.add({ type: 'offer_sale', province: s.dataset.prov, to: s.dataset.sell, price }); hideMenu(); return;
+    }
     const b = e.target.closest('[data-to]'); if (!b) return;
     O.add({ type: 'give_province', province: b.dataset.prov, to: b.dataset.to }); hideMenu();
   };
@@ -39,7 +45,7 @@ const selArmy = () => {
   const own = ownUnitsAt(sel.f);
   return own.find(a => a.id === sel.id) || own[0] || null;
 };
-const canRecruitHere = () => !!sel && !!ownCapitalAt(sel.f);   // recruiting only in own cities (4.0)
+const canRecruitHere = () => !!sel && !!ownCapitalAt(sel.f) && !blocksEndAt(sel.f);   // recruiting only in own cities (4.0), not under foreign troops
 const canBuildHere = () => !!sel && nextToOwnPort(sel.f) && !isEnemyAt(sel.f);
 const canDisband = a => isFleet(a) ? nextToOwnPort(a.field) : !!ownCapitalAt(a.field);   // ships only next to an own port
 const otherHere = a => ownUnitsAt(a.field).find(u => u.id !== a.id && isFleet(u) !== isFleet(a)) || null;
@@ -95,8 +101,11 @@ function computeReach() {
         const k = key(n);
         if (dist.has(k) || !canStep(a, f, n, group)) continue;
         dist.set(k, d + 1);
-        if (isEnemyAt(n)) kind.set(k, 'attack');                                   // enemies stop movement
-        else { kind.set(k, 'go'); if (isSea(n) === isSea(origin)) nq.push(n); }    // putting to sea / landing too
+        if (isEnemyAt(n)) kind.set(k, 'attack');                                   // hostile units stop movement
+        else {
+          if (!blocksEndAt(n)) kind.set(k, 'go');                                  // friendly units: pass through, no end point
+          if (isSea(n) === isSea(origin)) nq.push(n);                              // putting to sea / landing too
+        }
       }
       q = nq;
     }
@@ -140,7 +149,8 @@ function buildRoute(cursor) {
   if (!full.length) return null;
   let stop = O.thisTurn(a, full), attack = false;
   for (let i = 0; i < stop; i++) if (isEnemyAt(full[i])) { stop = i + 1; attack = true; break; }
-  return { a, full, near: full.slice(0, stop), far: full.slice(stop - 1), attack };
+  if (!attack) while (stop > 0 && blocksEndAt(full[stop - 1])) stop--;   // the move ends on the last free field (RULES.md 11.1)
+  return { a, full, near: full.slice(0, stop), far: stop > 0 ? full.slice(stop - 1) : [a.field, ...full], attack };
 }
 function drawRoute(rt) {
   if (!rt) { R.showRoute(null); return; }
@@ -199,12 +209,14 @@ function onContext(f) {
   hideMenu();
   if (wps.length) { wps.pop(); update(); return; }   // right-click takes the last waypoint back
   const tok = f && tokenAt(f), prov = tok && P()[tok], others = Object.keys(ctx.G.players).filter(p => p !== ctx.G.me);
-  const give = prov && ctx.G.owners[tok] === ctx.G.me && others.length && !O.gifted(tok);
+  const own = prov && ctx.G.owners[tok] === ctx.G.me && others.length, give = own && !O.gifted(tok), sell = own && !O.offered(tok);
   const a = f && armyAt(f), talk = f ? [...new Set([prov && ctx.G.owners[tok], a && a.owner])].filter(p => p && p !== ctx.G.me && ctx.G.players[p]) : [];
-  if (give || talk.length) {
+  if (give || sell || talk.length) {
     const m = $('ctxmenu');
     m.innerHTML = (give ? `<div>Provinz ${esc(prov.name)} verschenken an:</div>` +
       others.map(p => `<button data-prov="${esc(tok)}" data-to="${esc(p)}">${esc(pName(p))}</button>`).join('') : '') +
+      (sell ? `<div>Provinz ${esc(prov.name)} verkaufen für <input id="sell-price" type="number" min="1" value="1" style="width:4.5em"> Gold an:</div>` +
+      others.map(p => `<button data-prov="${esc(tok)}" data-sell="${esc(p)}">${esc(pName(p))}</button>`).join('') : '') +
       talk.map(p => `<button data-msg="${esc(p)}" data-f="${f[0]},${f[1]}">✉ Nachricht an ${esc(pName(p))}</button>`).join('');
     const s = R.fieldToScreen(f);
     m.style.left = s.x + 'px'; m.style.top = s.y + 'px'; m.hidden = false;
@@ -332,6 +344,7 @@ function onHover(f, e) {
   const base = cnt(rt.full.length) + (path.length < rt.full.length ? ` (diese Runde ${path.length})` : '') +
     (wps.length && same(f, wps[wps.length - 1]) ? ' · nochmal klicken = bestätigen' : '');
   moveTip(base, '');
+  if (!path.length) { moveTip(base + ' · Feld von fremden Truppen besetzt, die Armee bleibt stehen', ''); return; }
   if (pv.has(k)) { showPreview(pv.get(k), base); return; }
   clearTimeout(pvTimer);
   pvTimer = setTimeout(async () => {

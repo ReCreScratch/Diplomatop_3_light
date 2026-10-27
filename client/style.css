@@ -124,3 +124,14 @@ svg text{pointer-events:none;font-family:var(--font-body);fill:var(--badge-fg);p
 .tb-von{color:var(--dim);font-size:14px;margin:0 4px 0 2px}
 .tb-rest{font-size:14px;color:var(--dim)}.tb-rest b{color:var(--seal)}.tb-rest.done b{color:var(--dim)}
 .tb-help{max-width:300px;white-space:normal;font-size:13px;font-style:italic;color:var(--dim);line-height:1.25}
+
+/* diplomacy (milestone 3) */
+#board tr.dip td{text-align:left;font-size:13px;padding:2px 4px 5px 20px;background:#e9dab0aa}
+#board tr.dip button{font-size:.72em;padding:1px 6px;margin-right:4px}
+#board tr.dip button.on,.ally{background:linear-gradient(#a8392c,var(--seal2));color:#fbeed0;border-color:#40100b;text-shadow:none}
+#board tr.dip button:disabled{opacity:.5;cursor:not-allowed}
+.ally{display:inline-block;font-family:var(--font-head);font-size:10px;padding:0 5px;border-radius:3px;margin-left:4px;border:1px solid #40100b;letter-spacing:.04em}
+#board tr.dip .offer{display:inline-block;margin-right:6px;color:var(--arrow)}
+#tb-victory.lead{color:var(--gold)}
+#winbar{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:7;background:var(--seal2);color:#fbeed0;padding:8px 22px;border:2px solid var(--gold);border-radius:4px;box-shadow:0 4px 18px #000c;font-family:var(--font-head);font-size:19px;text-align:center}
+#winbar b{color:var(--gold)}

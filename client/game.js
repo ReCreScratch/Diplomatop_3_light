@@ -6,7 +6,7 @@ import * as In from './input.js';
 import * as Chat from './chat.js';
 import * as Replay from './replay.js';
 import { api } from './api.js';
-import { $, esc, ctx, setState, P, nName, pName, ownArmyAt, fieldName } from './ctx.js';
+import { $, esc, ctx, setState, P, nName, pName, ownArmyAt, fieldName, allianceOf, noAttackOn } from './ctx.js';
 
 let version = null, fetchedAt = 0, sendTo = null;
 
@@ -78,14 +78,28 @@ function renderTop() {
   $('tb-rec').innerHTML = `Rekruten <b>${b.recruits}/${b.limit}</b>`;
   const c = t => L.filter(o => o.type === t).length;
   const parts = [[c('move'), 'Zug', 'Züge'], [c('recruit'), 'Rekrutierung', 'Rekrutierungen'], [c('disband'), 'Abrüstung', 'Abrüstungen'],
-    [c('forced_march'), 'Gewaltmarsch', 'Gewaltmärsche'], [c('halt'), 'Halt', 'Halts'], [c('send_gold') + c('give_province'), 'Überweisung', 'Überweisungen']]
+    [c('forced_march'), 'Gewaltmarsch', 'Gewaltmärsche'], [c('halt'), 'Halt', 'Halts'], [c('send_gold') + c('give_province') + c('buy'), 'Überweisung', 'Überweisungen'],
+    [c('no_attack') + c('invite') + c('accept') + c('leave') + c('offer_sale'), 'Diplomatiebefehl', 'Diplomatiebefehle']]
     .filter(p => p[0]).map(p => `${p[0]} ${p[0] === 1 ? p[1] : p[2]}`);
   $('tb-sum').textContent = parts.length ? parts.join(', ') : 'keine Befehle';
   const rd = G.ready && G.ready[G.me], btn = $('btn-ready');
-  btn.textContent = rd ? 'Bereit ✓ (zurücknehmen)' : 'Bereit'; btn.hidden = !G.me;
+  btn.textContent = rd ? 'Bereit ✓ (zurücknehmen)' : 'Bereit'; btn.hidden = !G.me || !!G.winner;
+  renderVictory();
   const idle = Object.values(G.armies).filter(a => ownArmyAt(a.field) && O.movableLeft(a) > 0 && !O.hasOrder(a) && !O.marching(a)).length;
   $('tb-idle').textContent = idle && !rd ? `${idle} ${idle === 1 ? 'Armee' : 'Armeen'} ohne Befehl` : '';
   tickTimer();
+}
+// victory countdown (who leads, how many resolutions held) and, at the end, the winner (RULES.md 11.5)
+function renderVictory() {
+  const G = ctx.G, V = G.victory || {}, lead = V.leader, r = G.rules;
+  const who = ps => ps.map(nName).join(' + ');
+  const el = $('tb-victory'), win = $('winbar');
+  el.title = `Sieg: mehr als ${Math.round(r.victory_share_single * 100)} % der Landfelder allein oder mehr als ${Math.round(r.victory_share_alliance * 100)} % im Bündnis `
+    + `(Bündnis mindestens ${r.alliance_min_turns} Runden alt), ${r.victory_hold_turns} Runden in Folge gehalten.`;
+  el.className = lead ? 'lead' : '';
+  el.innerHTML = G.winner ? '' : lead ? `Siegbedingung: <b>${esc(who(lead.players))}</b> ${lead.turns}/${V.need}` : '';
+  win.hidden = !G.winner;
+  if (G.winner) win.innerHTML = `Spiel beendet – <b>${esc(who(G.winner.players))}</b> ${G.winner.players.length > 1 ? 'gewinnen' : 'gewinnt'} in Runde ${G.winner.turn}${G.winner.alliance ? ' (Bündnis)' : ''}.`;
 }
 function tickTimer() {
   const G = ctx.G;
@@ -106,12 +120,13 @@ function renderOrderList() {
   R.focusOrder(null);
 }
 
-// ---------- board with inline gold field ----------
+// ---------- board with inline gold field and diplomacy buttons ----------
+const pct = x => Math.round(x * 100);
 function renderBoard() {
   const G = ctx.G, old = $('b-amt'), keep = old ? { v: old.value, focus: document.activeElement === old } : null;
   if (sendTo && !G.players[sendTo]) sendTo = null;
   const maxSend = O.budget().canSend;
-  let h = '<tr><th>Spieler</th><th>Prov.</th><th title="Anteil an allen Landfeldern">% Land</th><th>Eink.</th><th>Unterh.</th><th>Arm.</th><th>Div.</th><th title="Schiffe">Sch.</th></tr>';
+  let h = '<tr><th>Spieler</th><th>Prov.</th><th title="Zählender Anteil an allen Landfeldern (tatsächlicher Anteil in Klammern). Geschenkte und gekaufte Provinzen zählen erst nach einiger Zeit.">% Land</th><th>Eink.</th><th>Unterh.</th><th>Arm.</th><th>Div.</th><th title="Schiffe">Sch.</th></tr>';
   for (const r of G.board || []) {
     const pend = O.book.list.map((o, i) => [o, i]).filter(([o]) => (o.type === 'send_gold' || o.type === 'give_province') && o.to === r.player)
       .map(([o, i]) => {
@@ -121,12 +136,57 @@ function renderBoard() {
     const form = sendTo !== r.player ? '' : maxSend < 1
       ? '<span class="pend bad">Kein Gold übrig</span>'
       : `<span class="sendform">Gold senden: <input id="b-amt" type="number" min="1" max="${maxSend}" value="1"> <button data-send="1">OK</button> <small>max. ${maxSend}</small></span>`;
-    h += `<tr data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}"><td><span class="sw" style="background:${R.colorOf(r.player)}"></span><b>${esc(r.name)}</b> <small>${esc(nName(r.player))}</small>${r.player !== G.me ? ` <button class="gold-btn" data-gold="${r.player}" title="Gold senden">Gold</button>` : ''}${pend}${form}</td>` +
-      `<td>${r.provinces}</td><td>${Math.round(r.share * 100)}</td><td>${r.income}</td><td>${r.upkeep}</td><td>${r.armies}</td><td>${r.divisions}</td><td>${r.ships || 0}</td></tr>`;
+    const al = r.alliance && G.alliances && G.alliances[r.alliance];
+    const badge = al ? ` <span class="ally" title="Bündnis: ${esc(al.members.map(nName).join(' + '))}">Bündnis ${esc(r.alliance.replace(/^\D+/, ''))}</span>` : '';
+    h += `<tr data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}"><td><span class="sw" style="background:${R.colorOf(r.player)}"></span><b>${esc(r.name)}</b> <small>${esc(nName(r.player))}</small>${badge}${r.player !== G.me ? ` <button class="gold-btn" data-gold="${r.player}" title="Gold senden">Gold</button>` : ''}${pend}${form}</td>` +
+      `<td>${r.provinces}</td><td>${pct(r.share_counted ?? r.share)} <small>(${pct(r.share)})</small></td><td>${r.income}</td><td>${r.upkeep}</td><td>${r.armies}</td><td>${r.divisions}</td><td>${r.ships || 0}</td></tr>`;
+    if (G.me && r.player !== G.me && !G.winner) h += dipRow(r.player);
   }
   $('board').innerHTML = h;
   const nw = $('b-amt');
   if (nw && keep) { nw.value = keep.v; if (keep.focus) nw.focus(); } else if (nw) nw.focus();
+}
+
+// Diplomacy buttons under a player's row: do-not-attack toggle, alliance (invite / accept / leave), sale offers.
+// A button toggles its pending order (clicking again takes it back).
+function dipRow(p) {
+  const G = ctx.G, me = G.me, max = G.rules.max_alliance_size, myAl = allianceOf(me), hisAl = allianceOf(p), b = O.budget();
+  const btn = (kind, label, on, title = '', attrs = '', off = false) =>
+    `<button data-dip="${kind}" data-dp="${esc(p)}" ${attrs} class="${on ? 'on' : ''}" ${off ? 'disabled' : ''} title="${esc(title)}">${label}${on ? ' ✓' : ''}</button>`;
+  const pend = (type, pred) => !!O.pendingOrder(type, pred);
+  const bits = [];
+  const np = O.pendingOrder('no_attack', o => o.to === p), eff = np ? np.on : noAttackOn(me, p);
+  bits.push(btn('noatk', 'Nicht angreifen', eff, 'Du greifst diesen Spieler nicht an. Tut er das auch, kämpfen eure Truppen nicht gegeneinander.')
+    + (noAttackOn(p, me) ? ` <small>${eff ? 'gegenseitig' : 'er verzichtet auf Angriffe'}</small>` : ''));
+  if (myAl && myAl === hisAl) {
+    bits.push(btn('leave', 'Austreten', pend('leave', () => true), 'Aus dem Bündnis austreten (wirksam nach dieser Runde).'));
+  } else {
+    const inv = (G.invitations.incoming || []).find(i => i.from === p);
+    if (inv && !myAl) bits.push(btn('accept', 'Annehmen', pend('accept', o => o.from === p), 'Die Einladung zum Bündnis annehmen (gilt nur diese Runde).'));
+    const room = myAl ? myAl.members.length < max : max >= 2;
+    if (!hisAl && room) bits.push(btn('invite', 'Bündnis anbieten', pend('invite', o => o.to === p), 'Zum Bündnis einladen; der andere kann in der nächsten Runde annehmen.'));
+    if ((G.invitations.outgoing || []).some(i => i.to === p)) bits.push('<small>Einladung läuft (nur diese Runde)</small>');
+  }
+  for (const o of (G.offers.incoming || []).filter(o => o.from === p)) {
+    const prov = (P()[o.province] || {}).name || o.province, sel = pend('buy', x => x.province === o.province);
+    const poor = !sel && !G.rules.allow_spending_into_debt && b.gold < o.price;
+    bits.push(`<span class="offer">Angebot: ${esc(prov)} für ${o.price} Gold ` + btn('buy', 'Kaufen', sel, poor ? 'Nicht genug Gold.' : 'Provinz zu diesem Preis kaufen (bezahlt in der Goldphase).', `data-prov="${esc(o.province)}"`, poor) + '</span>');
+  }
+  for (const o of (G.offers.outgoing || []).filter(o => o.to === p)) bits.push(`<small>Dein Angebot: ${esc((P()[o.province] || {}).name || o.province)} für ${o.price} Gold (nur diese Runde)</small>`);
+  return `<tr class="dip"><td colspan="8">${bits.join(' ')}</td></tr>`;
+}
+function onDip(el) {
+  const p = el.dataset.dp, L = O.book.list, kind = el.dataset.dip;
+  const idx = (type, pred) => L.findIndex(o => o.type === type && pred(o));
+  const toggle = (type, pred, order) => { const i = idx(type, pred); if (i >= 0) O.removeAt(i); else O.add(order); };
+  if (kind === 'noatk') {
+    const i = idx('no_attack', o => o.to === p), now = noAttackOn(ctx.G.me, p), want = !(i >= 0 ? L[i].on : now);
+    if (want === now) { if (i >= 0) O.removeAt(i); } else O.add({ type: 'no_attack', to: p, on: want });   // back to the current state = no order
+  }
+  else if (kind === 'invite') toggle('invite', o => o.to === p, { type: 'invite', to: p });
+  else if (kind === 'accept') toggle('accept', o => o.from === p, { type: 'accept', from: p });
+  else if (kind === 'leave') toggle('leave', () => true, { type: 'leave' });
+  else if (kind === 'buy') toggle('buy', o => o.province === el.dataset.prov, { type: 'buy', province: el.dataset.prov });
 }
 function clampAmount(el) {
   const max = O.budget().canSend;
@@ -141,6 +201,9 @@ function sendGold() {
   O.add({ type: 'send_gold', to, amount });
 }
 function onBoardClick(e) {
+  const dip = e.target.closest('[data-dip]');
+  if (dip) { if (!dip.disabled) onDip(dip); return; }
+  if (e.target.closest('tr.dip')) return;
   if (e.target.closest('[data-send]')) { sendGold(); return; }
   const d = e.target.closest('[data-del]');
   if (d) { O.removeAt(+d.dataset.del); return; }

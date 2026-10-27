@@ -3,6 +3,7 @@ from .combat import preview_fight
 from .conquest import can_pay, conquest_cost, conquest_target
 from .orders import Move, Pending, moves_as_group, plural, this_turn
 from .phases.gold import income_of, upkeep_of
+from .victory import fields_of
 
 
 def empty_preview(errors):
@@ -12,9 +13,9 @@ def empty_preview(errors):
 
 
 def first_enemy(state, player, path):
-    """(index of the first step with enemy units, those units) or (None, [])."""
+    """(index of the first step with hostile units, those units) or (None, [])."""
     for index, step in enumerate(path):
-        enemies = state.enemy_units_at(step, player)
+        enemies = state.hostile_units_at(step, player)
         if enemies:
             return index, enemies
     return None, []
@@ -38,6 +39,12 @@ def preview_move(state, player, army_id, count, path, forced_march=None):
     count = army["divisions"] if group else min(count, state.movable(army))
     path = path[:this_turn(state, army, path, group=group)]   # only this turn's part (standing marches, G58)
     index, enemies = first_enemy(state, player, path)
+    if not enemies:   # the move may not end on a field held by non-hostile foreign units (RULES.md 11.1)
+        free = state.free_steps(player, path)
+        if not free:
+            return {"valid": True, "errors": [], "end_field": list(army["field"]), "fight": None, "conquest": None,
+                    "text": "Das Ziel ist von fremden Truppen besetzt, die Armee bleibt stehen."}
+        path = path[:free]
     end = path[index] if enemies else path[-1]
     survivors, fight, texts = count, None, []
     if enemies:
@@ -63,20 +70,18 @@ def preview_move(state, player, army_id, count, path, forced_march=None):
 
 
 def board(state):
-    """One public row per player. share = share of all land fields (victory measure, 4.0)."""
-    sizes = {}
-    for token in state.cells.values():
-        if token in state.owners:
-            sizes[token] = sizes.get(token, 0) + 1
-    total = sum(sizes.values())
+    """One public row per player. share = share of all land fields; share_counted = the part that counts for victory
+    (gifted and sold provinces only after gift_delay_turns, RULES.md 11.5)."""
+    fields, total = fields_of(state, state.turn - 1)
     rows = []
     for player, info in state.players.items():
         units = [a for a in state.armies.values() if a["owner"] == player]
         armies = [a for a in units if not state.is_fleet(a)]
-        codes = state.provinces_of(player)
-        fields = sum(sizes.get(code, 0) for code in codes)
-        rows.append({"player": player, "name": info["name"], "provinces": len(codes), "fields": fields,
-                     "share": fields / total if total else 0, "income": income_of(state, player),
+        real, counted = fields[player]
+        alliance = state.alliance_of(player)
+        rows.append({"player": player, "name": info["name"], "provinces": len(state.provinces_of(player)), "fields": real,
+                     "share": real / total if total else 0, "share_counted": counted / total if total else 0,
+                     "alliance": alliance["id"] if alliance else None, "income": income_of(state, player),
                      "upkeep": upkeep_of(state, player), "armies": len(armies),
                      "divisions": sum(a["divisions"] for a in armies),
                      "ships": sum(a["divisions"] for a in units if state.is_fleet(a))})

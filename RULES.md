@@ -54,10 +54,15 @@ Gap IDs (G1 …) refer to the original question list and are kept for traceabili
 ### 3.2 Resolution
 Resolution runs in fixed phases *[decided, 4.0]*. Inside each phase, players go one after another in the player
 order, and each player's orders run in the order they were entered *[3.0]*.
-1. **Recruitment phase:** recruiting and disbanding. New divisions appear on the map.
-2. **Gold phase:** every player receives **income** (sum of the income values of their provinces) and pays
+1. **Diplomacy phase** (milestone 3, section 11): "do not attack" toggles, alliance invitations, acceptances and
+   leaves, sale offers. They count for the rest of this resolution.
+2. **Recruitment phase:** recruiting and disbanding. New divisions appear on the map.
+3. **Gold phase:** every player receives **income** (sum of the income values of their provinces) and pays
    **upkeep** (section 4.2); gold transfers and province gifts/sales are carried out.
-3. **Movement phase:** moves, including combat and conquest.
+4. **Movement phase:** moves, including combat and conquest.
+
+After the last phase: members who left an alliance are out, old invitations and offers expire, the victory check runs
+(section 11.5).
 
 Then the next turn starts and a new player order is drawn.
 - Turn 1 starts with `start_gold`; the first income is paid at the end of turn 1 *[default]*.
@@ -101,8 +106,8 @@ Then the next turn starts and a new player order is drawn.
 
 ### 4.5 Transfers
 - A player can send gold to another player.
-- A player can **give** or **sell** a province to another player *[4.0]*. How selling works (offer → accept,
-  atomic swap) is still open *[G9]*.
+- A player can **give** or **sell** a province to another player *[4.0]*. Selling: offer → accept next turn, atomic
+  swap in the gold phase (section 11.4) *[decided, G9]*.
 - Gifted or sold provinces count towards victory only after `gift_delay_turns` (10) turns *[3.0 – not in 4.0]* (section 11).
 
 ## 5. Armies & movement
@@ -246,19 +251,64 @@ Applies to nations without a player and to nations of surrendered players. Set i
 - If the attacking side survives and the defending side is destroyed, the attacker moves onto the field; if both
   survive, the attacker stays where it came from (G59).
 
-## 11. Diplomacy, alliances & victory (milestone 3 – provisional)
-- **"Do not attack" toggle** *[4.0]*: each player can switch it on for any other player. While both have it on for
-  each other, their units and cities are not hostile to each other: they don't fight and don't conquer each other.
-- **Alliances** *[4.0]*: up to `max_alliance_size` players (map setting, default 2) form a formal alliance. It can be
-  dissolved again. Units of allies are allied. All players are told when an alliance is formed.
-- **Victory** *[decided, 4.0]*, measured in **land fields** (not provinces):
-  - a single player: more than `victory_share_single` (40 %) of all land fields
-  - an alliance: more than `victory_share_alliance` (55 %) of all land fields; the alliance must have existed for
-    `alliance_min_turns` turns before it can win *[4.0, answers G43; value: default 10]*
-- Gifted and sold provinces count only after `gift_delay_turns` (10). The display shows both percentages, the second
-  in brackets *[3.0]*.
-- Milestone 1 only shows each player's share. There is no automatic game end yet.
-- Open: G44–G48 (section 14).
+## 11. Diplomacy, alliances & victory (milestone 3)
+Resolution gets a **diplomacy phase** before the recruitment phase: diplomacy → recruitment → gold → movement.
+
+### 11.1 Hostility
+- Two players are **hostile** unless they are allied or both have "do not attack" on for each other. AI nations and
+  neutral provinces are hostile to everyone.
+- Only hostile units fight, and only hostile cities can be conquered *[4.0]*.
+- Units may **pass through** fields with units of non-hostile players but may not end their move there; the move then
+  ends on the last free field before *[decided]*. Exception: allied units may share a **sea** field *[4.0]*. A player
+  still has at most one fleet and one army per sea field; armies and fleets of the same player merge as before.
+  Players with only a "do not attack" pact may not share a sea field.
+- A fight that is won also ends on the start field if the target field still holds non-hostile foreign units
+  (like G59) *[default]*.
+- Recruiting or building a ship on a field that holds non-hostile foreign units is not possible
+  ("Feld ist von fremden Truppen besetzt.") *[default]*.
+- **Standing marches** *[default]*: if the end of a segment is blocked, the army stops on the last free field (or stays)
+  and keeps the rest of the route, including the blocked part. The march tries again every turn until it is free;
+  it ends only for the usual reasons (fight, conquest attempt, merge, halt). A whole army that cannot start keeps its
+  route; a part that is split off and cannot move is not created (no route). With `standing_marches` off the rest
+  is dropped.
+- An attack on a sea field with units of several allied players fights all of them as one side (tank rule, 10.5).
+
+### 11.2 "Do not attack" toggle *[4.0]*
+- Each player can switch it on or off for any other player. It stays until switched again.
+- It takes effect **immediately**, in the resolution of the same turn (diplomacy phase) *[decided, G61]*.
+
+### 11.3 Alliances *[decided, G44/G45]*
+- A player **invites** another player; the invited player **accepts** in the next turn (the invitation is valid for
+  that one turn) *[default]*. If the inviting player is in an alliance, the new player joins it, else a new alliance
+  of the two is founded.
+- A player is in at most **one** alliance. An alliance has at most `max_alliance_size` (2, per map) members.
+- All players are told when an alliance is formed or changes *[4.0]*.
+- A member can **leave**; in this turn's resolution they are still allied, afterwards not *[decided]*. The leave is
+  carried out at the end of the resolution, before the victory check. An alliance with one member left is dissolved.
+- Every change of members (founding, joining, leaving) sets the alliance's `since` to that turn; `alliance_min_turns`
+  counts from there *[default]*: the alliance is old enough at the end of resolution T if T − since ≥ `alliance_min_turns`.
+- Invitations and sale offers stay private: they are not part of the public events; only the two players see them.
+  Forming an alliance, leaving, dissolving and "do not attack" are public events.
+
+### 11.4 Selling provinces *[decided, G9]*
+- The seller offers a province to a player for a price in gold (whole number). The buyer accepts ("buy") in the next turn
+  (valid for that one turn). In the gold phase, after income and upkeep, the province and the gold change hands
+  together, if the seller still owns the province and the buyer has the gold (checked when the order is entered, like
+  sending gold, and again at resolution). Otherwise the order is skipped and nothing changes. A province has at most
+  one open offer; a new one replaces it. A sale counts like a gift for the gift delay.
+
+### 11.5 Victory *[decided, 4.0, G46]*
+- Measured in **land fields** (not provinces), checked at the end of every resolution:
+  - a single player: more than `victory_share_single` (40 %) of all land fields (also when in an alliance)
+  - an alliance: its members together (G47) more than `victory_share_alliance` (55 %); the alliance must exist for
+    `alliance_min_turns` (10) turns, counted from its last change of members *[default]*
+- The condition must hold at the end of `victory_hold_turns` (3) resolutions in a row *[decided]*, for the same leader.
+  Then the game ends: no more orders are accepted. If several meet it, the one with the highest counted share leads
+  (an alliance before its own member). Changing the leader or breaking the condition resets the count to 0 *[default]*.
+- Gifted and sold provinces count only after `gift_delay_turns` (10) turns; conquered provinces count at once
+  *[decided, G48]*. The display shows both shares, the counted one first and the real one in brackets.
+  A gift or sale made in resolution g counts from the end of resolution g + `gift_delay_turns` *[default]*. If a
+  province is conquered, its gift record is cleared.
 
 ## 12. Lobby, editor & technical features (milestone 4+)
 - **Lobby** *[4.0]*: nations are chosen by each player or handed out at random; random nations are revealed one by
@@ -302,6 +352,7 @@ Applies to nations without a player and to nations of surrendered players. Set i
 | `conquest_cost_factor` | 1 | conquest cost = income × factor |
 | `conquest_allow_army_used_up` | true | exactly enough divisions is enough |
 | `turn_order_rule` | no_repeat_position | which turn-order module is used |
+| `phases` | diplomacy, recruitment, gold, movement | resolution phases in order (milestone 3 added `diplomacy`) |
 | `turn_timer_seconds` | 0 | 0 = wait until all are ready |
 | `animation_pause_seconds` | 0.5 | pause between replay steps |
 | `show_other_players_gold` | false | G51 |
@@ -313,10 +364,11 @@ Applies to nations without a player and to nations of surrendered players. Set i
 | `transport_move_range` | 1 | milestone 2 |
 | `transport_combat_value` | 0.25 | milestone 2 |
 | `gift_delay_turns` | 10 | milestone 3 |
+| `victory_hold_turns` | 3 | milestone 3 |
 | `victory_share_single` | 0.40 | share of land fields, milestone 3 |
 | `victory_share_alliance` | 0.55 | share of land fields, milestone 3 |
 | `max_alliance_size` | 2 (per map) | milestone 3 |
-| `alliance_min_turns` | 10 | milestone 3 |
+| `alliance_min_turns` | 10 | turns since the alliance's last change of members before it can win, milestone 3 |
 | `nation_reveal_pause_seconds` | 1 | milestone 4 |
 | `idle_warning_seconds` | 40 | milestone 4 |
 
@@ -343,16 +395,12 @@ Applies to nations without a player and to nations of surrendered players. Set i
 |---|---|---|
 | M7 | Where are the ports on the Europa map? | one per coastal province, on or next to the city |
 
-**Alliances & victory (milestone 3):**
-| ID | Question | Default |
-|---|---|---|
-| G44 | How are alliances formed? Can a player be in more than one? | invite/accept; one only |
-| G45 | Does dissolving an alliance take effect immediately? | next turn |
-| G46 | Is victory instant, or does it have to be held? Does the game end automatically? | instant, game ends |
-| G47 | Is the alliance's share simply the sum of its members' land fields? | yes |
-| G48 | Does the gift delay apply to conquered provinces too? | no, only gifted/sold |
-| G9 | How does selling work (offer → accept, atomic swap)? | offer/accept, atomic |
-| G61 | Does "do not attack" take effect immediately or next turn? | next turn's resolution |
+**Alliances & victory (milestone 3):** G9, G43–G48, G61 decided (section 11). New defaults – object if they feel wrong:
+- Invitations and sale offers are private (no public event).
+- A blocked move keeps its route and waits (11.1); a won fight whose target is still blocked ends on the start field.
+- The victory counter restarts when the leader changes. A single player at 40 % wins alone even if his ally
+  does not qualify.
+- Saves from before milestone 3 get the new settings and the diplomacy phase when loaded.
 
 **Technical:**
 | ID | Question | Default |

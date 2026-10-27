@@ -58,6 +58,16 @@ def load_rules(map_rules=None, overrides=None):
     return merge(merge(base, map_rules), overrides)
 
 
+def fill_defaults(rules, diplomacy_phase=False):
+    """Rules of a saved game plus the settings added since (missing keys come from rules/default.json).
+    diplomacy_phase: also put the diplomacy phase first (saves from before milestone 3)."""
+    base = json.loads(RULES_FILE.read_text(encoding="utf-8"))
+    rules = merge(base, rules)
+    if diplomacy_phase and "diplomacy" not in rules["phases"]:
+        rules["phases"] = ["diplomacy"] + list(rules["phases"])
+    return rules
+
+
 def load_map(folder):
     """Read folder/map.json and validate it. Raises MapError."""
     path = Path(folder) / "map.json"

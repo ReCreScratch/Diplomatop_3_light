@@ -42,7 +42,7 @@ def test_missing_map_file(tmp_path):
 def test_rules_merge_order():
     rules = engine.load_rules({"start_gold": 20, "division_cost": 4}, {"division_cost": 5})
     assert rules["start_gold"] == 20 and rules["division_cost"] == 5
-    assert rules["phases"] == ["recruitment", "gold", "movement"]
+    assert rules["phases"] == ["diplomacy", "recruitment", "gold", "movement"]
     assert engine.load_rules({}, {})["start_gold"] == 10
 
 
@@ -56,7 +56,7 @@ def test_rules_have_all_section_13_settings():
                 "turn_timer_seconds", "start_gold", "show_other_players_gold", "gift_delay_turns",
                 "victory_share_single", "victory_share_alliance", "transport_combat_value",
                 "fleet_move_range", "fleet_linked_move_range", "transport_move_range", "ship_cost",
-                "upkeep_per_ship", "ship_disband_refund"):
+                "upkeep_per_ship", "ship_disband_refund", "victory_hold_turns", "max_alliance_size", "alliance_min_turns"):
         assert key in rules
 
 

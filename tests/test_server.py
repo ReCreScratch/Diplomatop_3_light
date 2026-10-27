@@ -128,3 +128,47 @@ def test_chat(tmp_path):
     # save/load keeps chat
     before = st(t1)["chat"]
     assert len(before) == 3 and make(tmp_path).get(f"/api/games/{gid}/state", params={"token": t1}).json()["chat"] == before
+
+
+def test_diplomacy_view_and_finished_game(tmp_path):
+    c = make(tmp_path)
+    r = c.post("/api/games", json={"map": "europa", "rules": {"victory_hold_turns": 1}}).json()
+    gid = r["game_id"]
+    t1 = c.post(f"/api/games/{gid}/join", json={"name": "Felix", "nation": "GB", "host_token": r["host_token"]}).json()["token"]
+    t2 = c.post(f"/api/games/{gid}/join", json={"name": "Anna", "nation": "FR"}).json()["token"]
+    c.post(f"/api/games/{gid}/start", params={"token": t1})
+    url = lambda what: f"/api/games/{gid}/{what}"
+    st = lambda t: c.get(url("state"), params={"token": t}).json()
+    play = lambda t, orders: c.put(url("orders"), params={"token": t}, json={"orders": orders}).json()
+    ready = lambda t: c.post(url("ready"), params={"token": t}, json={"ready": True})
+
+    v = st(t1)
+    assert v["alliances"] == {} and v["no_attack"] == {} and v["winner"] is None
+    assert v["invitations"] == {"incoming": [], "outgoing": []} and v["offers"] == {"incoming": [], "outgoing": []}
+    assert v["victory"] == {"leader": None, "need": 1}
+    assert all("alliance" in row and "share_counted" in row for row in v["board"])
+
+    prov = next(code for code, o in v["owners"].items() if o == "GB")
+    assert play(t1, [{"type": "invite", "to": "FR"}, {"type": "no_attack", "to": "FR", "on": True},
+                     {"type": "offer_sale", "province": prov, "to": "FR", "price": 2}])["errors"] == [[], [], []]
+    ready(t1), ready(t2)
+    v1, v2 = st(t1), st(t2)
+    assert v1["no_attack"] == {"GB": ["FR"]}
+    assert v1["invitations"]["outgoing"] == [{"from": "GB", "to": "FR", "turn": 1}] and v1["invitations"]["incoming"] == []
+    assert v2["invitations"]["incoming"] == v1["invitations"]["outgoing"] and v2["offers"]["incoming"][0]["price"] == 2
+    assert play(t2, [{"type": "accept", "from": "GB"}, {"type": "buy", "province": prov}])["errors"] == [[], []]
+    # GB gets more than 40 % of the land: the game ends after this resolution (victory_hold_turns = 1)
+    game = c.app.state.games.games[gid]
+    for code, owner in game.state.owners.items():
+        if owner is None or owner == "FR":
+            game.state.owners[code] = "GB"
+    game.state.owners[prov] = "GB"
+    ready(t1), ready(t2)
+    done = st(t1)
+    assert done["status"] == "finished" and done["winner"]["players"] == ["GB"] and done["alliances"]
+    assert done["timer_remaining"] is None
+    assert c.put(url("orders"), params={"token": t1}, json={"orders": []}).json() == {"detail": "Das Spiel ist beendet."}
+    assert ready(t1).status_code == 400
+    assert c.get(url("lobby"), params={"token": t1}).json()["status"] == "finished"
+    assert c.post(url("chat"), params={"token": t1}, json={"to": None, "text": "gg"}).status_code == 200
+    assert make(tmp_path).get(url("state"), params={"token": t1}).json()["winner"] == done["winner"]   # survives a restart

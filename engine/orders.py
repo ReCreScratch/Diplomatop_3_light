@@ -28,6 +28,9 @@ class Pending:
         self.toggles = {}       # army id -> forced march after this turn's toggle orders
         self.given = set()      # provinces already offered as gift
         self.links = {}         # unit id -> linked unit id (or None) after this turn's link / unlink orders
+        self.invited = set()    # players already invited in this list
+        self.accepted = False   # an invitation is already accepted in this list
+        self.bought = set()     # provinces already bought in this list
 
 
 def is_int(value):
@@ -192,8 +195,10 @@ class Recruit(Order):
         field, count = self.data["field"], self.data["count"]
         if count <= 0:
             return ["Anzahl muss positiv sein."]
-        if state.enemy_army_at(field, player):
+        if state.hostile_army_at(field, player):
             return ["Feld ist vom Feind besetzt."]
+        if state.blockers_at(field, player):
+            return ["Feld ist von fremden Truppen besetzt."]
         if not own_city(state, player, field):
             return ["Rekrutieren geht nur in eigenen Städten."]
         return limit_errors(state, player, pending, count, count * state.rules["division_cost"])
@@ -232,8 +237,10 @@ class BuildShip(Order):
             return ["Anzahl muss positiv sein."]
         if not state.next_to_own_port(field, player):
             return ["Schiffe werden auf einem Seefeld neben einem eigenen Hafen gebaut."]
-        if state.enemy_units_at(field, player):
+        if state.hostile_units_at(field, player):
             return ["Feld ist vom Feind besetzt."]
+        if state.blockers_at(field, player):
+            return ["Feld ist von fremden Truppen besetzt."]
         return limit_errors(state, player, pending, count, count * state.rules["ship_cost"])
 
     def reserve(self, state, pending):
@@ -640,3 +647,6 @@ def run_phase_orders(state, parsed, phase, events):
                         order.apply(state, player, events)
                     if len(events) > first:
                         events[-1]["snap"] = snapshot(state)  # board right after this order
+
+
+from . import diplomacy_orders  # noqa: E402,F401  (registers the diplomacy orders; needs the classes above)

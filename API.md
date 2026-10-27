@@ -41,9 +41,22 @@ GameState.to_dict() / GameState.from_dict(d)                    # JSON-safe, rou
              "a2": {"id": "a2", "owner": "GB", "field": [15, 5], "divisions": 2, "fresh": 0, "forced_march": false, "unit": "ship", "linked": "a3"}},
   "next_army_id": 2,
   "player_order": ["FR", "GB"], "prev_player_order": [],
-  "gifts": [{"province": "GB3", "from": "GB", "to": "FR", "turn": 4}]
+  "gifts": [{"province": "GB3", "from": "GB", "to": "FR", "turn": 4}],
+  "alliances": {"b1": {"id": "b1", "members": ["GB", "FR"], "since": 7}}, "next_alliance_id": 2,
+  "no_attack": {"GB": ["DE"]},
+  "invitations": [{"from": "GB", "to": "IT", "turn": 7}],
+  "offers": [{"province": "GB3", "from": "GB", "to": "FR", "price": 5, "turn": 7}],
+  "victory": {"kind": "player", "id": "GB", "players": ["GB"], "turns": 2},
+  "winner": null
 }
 ```
+Milestone 3 keys (old saves lack them and still load; `rules` gets the new settings and the diplomacy phase):
+`alliances` = id -> {id, members, since}; `since` = turn of the last change of members. `no_attack` = player -> players he
+does not attack (hostile only if not mutual, not allied). `invitations` / `offers` are valid in the turn after `turn`
+(the turn they were made in) and are dropped at the end of the next resolution. `gifts` also records sales (`price`).
+`victory` = the running candidate (`kind` "player" / "alliance", `turns` = resolutions held in a row) or null;
+`winner` = `{players, alliance, turn}` once the game is won, then `resolve_turn` returns no events.
+`state.hostile(a, b)`: false for the same player, allies and mutual `no_attack`; true for `None` (neutral).
 `fresh` = divisions recruited this turn (cannot move unless `recruits_can_move_same_turn`); reset to 0 at turn start.
 `unit` = key of `rules.unit_types` (`division`, `ship`); a unit of ships is a fleet and `divisions` counts its ships.
 `linked` = id of the linked fleet / army (both carry it). `route` = standing march (owner only).
@@ -61,8 +74,18 @@ GameState.to_dict() / GameState.from_dict(d)                    # JSON-safe, rou
 | `build_ship` | `field` (sea field next to an own port), `count` | recruitment |
 | `link` | `fleet`, `army` (same sea field) | movement (with the toggles, before moves) |
 | `unlink` | `army` (either unit of the pair) | movement (with the toggles, before moves) |
+| `no_attack` | `to`, `on` (bool) | diplomacy (priority 0): standing toggle, effective at once |
+| `leave` | – | diplomacy (1): leaves the alliance at the end of the resolution |
+| `invite` | `to` | diplomacy (2): invitation valid in the next turn only (private, no event) |
+| `accept` | `from` | diplomacy (3): accepts last turn's invitation; founds or joins an alliance (max `max_alliance_size`) |
+| `offer_sale` | `province`, `to`, `price` (int > 0) | diplomacy (4): offer valid in the next turn only (private, no event) |
+| `buy` | `province` | gold (after income / upkeep): accepts last turn's offer; gold checked like `send_gold`; skipped if the seller no longer owns it |
 
 Rule details beyond RULES.md (*[default]*):
+- Hostility (RULES.md 11.1): `move` fights and conquers only hostile units / cities. Fields with non-hostile foreign units
+  can be passed but not ended on (allies may share a sea field): the move ends on the last free field of the walked
+  part, or does nothing (event `move_blocked`). The unwalked fields stay in the route (`standing_marches`).
+  `recruit` / `build_ship` there: "Feld ist von fremden Truppen besetzt.".
 - `recruit` on an own capital joins the own army there or creates a new army. `build_ship` likewise joins the own fleet.
 - A `move` of a linked unit moves both whole units (`count` must be all), unless an army lands: then it moves alone and
   the link ends. Events: `move` gets `with` (partner id); `fight` gets `losses` = {unit id: lost divisions/ships}.
@@ -90,7 +113,11 @@ Each event: `{"kind": ..., "player": pid|null, "text": "German one-liner", ...ex
 `forced_march` (`army`, `on`), `move` (`army`, `from`, `path`, `to`, `count`, optional `auto`: true), `halt` (`army`), `merge` (`army`, `into`, `field`),
 `fight` (`field`, `attacker`, `defender`, `attacker_losses`, `defender_losses`, `winner`: pid|null),
 `conquest` (`province`, `field`, `cost`, `old_owner`), `conquest_failed` (`province`, `field`, `cost`, `back_to`),
-`skipped` (`order`, `reason`).
+`skipped` (`order`, `reason`). Milestone 3: `no_attack` (`to`, `on`, `mutual`), `alliance` (`alliance`, `members`; founded,
+joined or changed), `leave` (`alliance`), `alliance_end` (`alliance`), `buy` (`province`, `to` = buyer, `seller`, `price`),
+`move_blocked` (`army`, `field`), `victory_progress` (`players`, `turns`, `need`), `victory` (`players`, `alliance`).
+Diplomacy events come first (with snaps); `alliance`/`leave`-removal/`alliance_end`/`victory*` at the end of the
+resolution have no snap. `invite` and `offer_sale` produce no event.
 Income/upkeep events come at the start of the gold phase (after recruitment, before movement); `turn_start` comes last.
 `fight.winner` is a player, `null` (both destroyed) or `"both"` (both survive, G59).
 **Snapshots:** after each order of the recruitment/gold/movement phases (applied or skipped) the *last* event that
@@ -108,8 +135,9 @@ its fight, conquest and merge). Unknown-order `skipped` events and the start-of-
 Based on the current board (ignores other orders).
 
 ## 7. board rows
-`{"player": "GB", "name": "Felix", "provinces": 9, "fields": 40, "share": 0.14, "income": 22, "upkeep": 1.75, "armies": 2, "divisions": 7}`
-– `share` = share of all land fields (victory measure, RULES.md section 11).
+`{"player": "GB", "name": "Felix", "provinces": 9, "fields": 40, "share": 0.14, "share_counted": 0.1, "alliance": "b1" | null, "income": 22, "upkeep": 1.75, "armies": 2, "divisions": 7, "ships": 0}`
+– `share` = real share of all land fields, `share_counted` = the part that counts for victory (gifts / sales younger than
+`gift_delay_turns` excluded, RULES.md section 11).
 `upkeep` = what the player would pay at the next turn start with the current armies.
 
 ## 8. HTTP API (`server/app.py`, FastAPI, JSON). Token = secret per player, passed as `?token=`.
@@ -117,7 +145,7 @@ Based on the current board (ignores other orders).
 |---|---|
 | `GET /api/maps` | → `["europa", ...]` (folders in `maps/`) |
 | `POST /api/games` | `{map, rules?: {}}` → `{game_id, host_token}` |
-| `GET /api/games/{gid}/lobby?token=` | → `{game_id, map, status: "lobby"/"running", nations: {code: name}, joined: {code: player_name}, me: code\|null, is_host: bool, host: code\|null, rules: {merged rules}}` (token optional) |
+| `GET /api/games/{gid}/lobby?token=` | → `{game_id, map, status: "lobby"/"running"/"finished", nations: {code: name}, joined: {code: player_name}, me: code\|null, is_host: bool, host: code\|null, rules: {merged rules}}` (token optional) |
 | `POST /api/games/{gid}/join` | `{name, nation, host_token?}` → `{token}`. Passing host_token marks this player as host. |
 | `POST /api/games/{gid}/start?token=` | host only, ≥1 player → `{ok: true}` |
 | `GET /api/games/{gid}/state?token=&since=N` | → `{changed: false}` if `version == N`, else the view below |
@@ -146,6 +174,11 @@ and bumps `version`.
 in which it was resolved; the client replay starts there
 and applies each group's `snap`. (Saves from before this feature have no `before`; the client then skips the auto-replay.)
 `my_recruit_limit` (= `recruit_limit_per_province` × own provinces at turn start) is also in the view.
+Milestone 3 view fields: `alliances` (all, public), `no_attack` (all, public), `invitations` and `offers` as
+`{"incoming": [...], "outgoing": [...]}` (only the caller's own; offers whose seller lost the province are left out),
+`victory` = `{"leader": {kind, id, players, turns} | null, "need": victory_hold_turns}`, `winner` (null or `{players, alliance, turn}`).
+When the game is won `status` becomes `"finished"`: `PUT orders`, `ready` and `preview` answer 400 "Das Spiel ist beendet.",
+the state and chat stay readable (chat still works).
 While `status == "lobby"`, `GET state` returns only `{changed, version, status}`; the client uses `/lobby` there.
 Errors: HTTP 400 (bad input), 403 (wrong token / not host), 404 (unknown game), body `{"detail": "German text"}`.
 `fresh` in armies counts only divisions recruited in earlier resolutions of this turn; the client adds pending

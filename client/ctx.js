@@ -28,7 +28,14 @@ export const unitsAt = f => ctx.armyIdx.get(key(f)) || [];
 export const armyAt = f => unitsAt(f)[0];
 export const ownUnitsAt = f => unitsAt(f).filter(a => a.owner === ctx.G.me);
 export const ownArmyAt = f => ownUnitsAt(f)[0] || null;
-export const isEnemyAt = f => unitsAt(f).some(a => a.owner !== ctx.G.me);
+// diplomacy (engine: state.hostile / blockers_at): allied or mutually peaceful players never fight
+export const allianceOf = pid => Object.values(ctx.G.alliances || {}).find(a => a.members.includes(pid)) || null;
+export const allied = (a, b) => !!a && !!b && a !== b && !!(allianceOf(a) || { members: [] }).members.includes(b);
+export const noAttackOn = (a, b) => ((ctx.G.no_attack || {})[a] || []).includes(b);
+export const hostile = (a, b) => !a || !b ? true : a === b || allied(a, b) ? false : !(noAttackOn(a, b) && noAttackOn(b, a));
+export const isEnemyAt = f => unitsAt(f).some(a => hostile(ctx.G.me, a.owner));
+// units of non-hostile foreign players: passable, but a move may not end there (allies may share a sea field)
+export const blocksEndAt = f => unitsAt(f).some(a => a.owner !== ctx.G.me && !hostile(ctx.G.me, a.owner) && !(isSea(f) && allied(ctx.G.me, a.owner)));
 // unit types are data (rules.unit_types); a fleet is a unit that stays at sea
 export const isFleet = a => !!a && (rules().unit_types[a.unit || rules().land_unit] || {}).terrain === 'sea';
 export const isOwnPort = f => {
