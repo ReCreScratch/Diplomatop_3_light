@@ -102,10 +102,16 @@ def own_army(state, player, army_id):
     return army if army and army["owner"] == player else None
 
 
+def own_city(state, player, field):
+    """The field is the city (capital) of a province the player owns."""
+    code = state.is_capital(field)
+    return bool(code) and state.owners[code] == player
+
+
 @register
 class SendGold(Order):
     type = "send_gold"
-    phase = "transfers"
+    phase = "gold"
     fields = {"to": "str", "amount": "int"}
 
     def validate(self, state, player, pending):
@@ -134,7 +140,7 @@ class SendGold(Order):
 @register
 class GiveProvince(Order):
     type = "give_province"
-    phase = "transfers"
+    phase = "gold"
     fields = {"province": "str", "to": "str"}
 
     def validate(self, state, player, pending):
@@ -178,21 +184,13 @@ class Recruit(Order):
             return ["Anzahl muss positiv sein."]
         if state.enemy_army_at(field, player):
             return ["Feld ist vom Feind besetzt."]
-        if not self.valid_place(state, player, field):
-            return ["Hier kann nicht rekrutiert werden."]
+        if not own_city(state, player, field):
+            return ["Rekrutieren geht nur in eigenen Städten."]
         limit = state.rules["recruit_limit_per_province"] * state.players[player]["provinces_at_turn_start"]
         fresh = sum(a["fresh"] for a in state.armies.values() if a["owner"] == player)
         if fresh + pending.recruited + count > limit:
             return ["Rekrutierungslimit überschritten."]
         return gold_errors(state, player, pending, count * state.rules["division_cost"])
-
-    @staticmethod
-    def valid_place(state, player, field):
-        """Own capital or a field with an own army."""
-        if state.own_army_at(field, player):
-            return True
-        code = state.is_capital(field)
-        return bool(code) and state.owners[code] == player
 
     def reserve(self, state, pending):
         pending.spent += self.data["count"] * state.rules["division_cost"]
@@ -228,6 +226,8 @@ class Disband(Order):
             return ["Armee gehört dir nicht."]
         if not 0 < self.data["count"] <= army["divisions"]:
             return ["Ungültige Divisionenzahl."]
+        if not own_city(state, player, army["field"]):
+            return ["Abrüsten geht nur in eigenen Städten."]
         return []
 
     def apply(self, state, player, events):

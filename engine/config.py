@@ -15,8 +15,9 @@ class MapError(Exception):
     """The map file is broken."""
 
 
-# Rounding modes usable by the settings upkeep_rounding and strength_rounding.
+# Rounding modes usable by the settings upkeep_rounding, strength_rounding and survivor_rounding.
 ROUNDERS = {
+    "none": lambda x: x,
     "half_up": lambda x: math.floor(x + Fraction(1, 2)),
     "up": math.ceil,
     "down": math.floor,
@@ -29,8 +30,15 @@ def exact(value):
 
 
 def round_by(mode, value):
-    """Round a Fraction with one of the ROUNDERS."""
-    return int(ROUNDERS[mode](value))
+    """Round a Fraction with one of the ROUNDERS ('none' keeps it exact)."""
+    result = ROUNDERS[mode](value)
+    return result if mode == "none" else int(result)
+
+
+def as_number(value):
+    """JSON-safe number for an exact value: int if whole, else float (gold may have decimals)."""
+    value = Fraction(value)
+    return int(value) if value.denominator == 1 else float(value)
 
 
 def merge(base, extra):

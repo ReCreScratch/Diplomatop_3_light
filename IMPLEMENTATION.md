@@ -36,9 +36,9 @@ diplomatio/
     state.py              GameState, Player, Province, Field, Army (plain dataclasses)
     orders.py             order types + registry
     phases/               one module per resolution phase
-      start_of_turn.py    income, upkeep, new player order
-      transfers.py
+      start_of_turn.py    new player order, reset fresh divisions
       recruitment.py
+      gold.py             income, upkeep, gold transfers and province gifts
       movement.py         moves, calls combat and conquest
     combat.py             combat formula interface + default formula
     conquest.py
@@ -63,10 +63,10 @@ diplomatio/
   class with `validate(state, player)` and `apply(state)`. A new order type (e.g. "build fleet") is a new class
   registered by name; the server and the client order list handle it generically.
 - **Phase pipeline:** resolution is a list of phase names in the config, e.g.
-  `["transfers", "recruitment", "movement"]`. Each phase takes the orders of its kind and runs them in player order.
+  `["recruitment", "gold", "movement"]`. Each phase takes the orders of its kind and runs them in player order.
   New mechanics add a phase or hook into an existing one.
 - **Swappable rules:** combat formula and turn-order rule are chosen by name from a registry
-  (`combat_formula: "default"`, `turn_order_rule: "no_repeat_first_last"`). A new variant is one new function.
+  (`combat_formula: "hp_attrition"`, `turn_order_rule: "no_repeat_position"`). A new variant is one new function.
 - **Unit types as data:** a unit type (division now; transport, fleet later) is defined in config with its move
   range, combat value, cost, upkeep and allowed terrain. Forced march is a modifier on top. Ships therefore
   mostly need new data plus the few special rules (embarking, tank rule).

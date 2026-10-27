@@ -34,7 +34,8 @@ export function init(h) {
 
 // ---------- selection ----------
 const selArmy = () => sel && ownArmyAt(sel.f);
-const canRecruitHere = () => !!sel && (!!selArmy() || !!ownCapitalAt(sel.f));
+const canRecruitHere = () => !!sel && !!ownCapitalAt(sel.f);   // recruiting only in own cities (4.0)
+const canDisband = a => !!ownCapitalAt(a.field);                  // disbanding too
 const defaultN = () => { const a = selArmy(); return a ? Math.max(1, O.movableLeft(a)) : 1; };
 function nMax() {
   const a = selArmy();
@@ -196,7 +197,7 @@ function doRecruit() {
 }
 function doDisband() {
   const a = selArmy(); if (!a) return;
-  const k = Math.min(sel.n, O.disbandMax(a));
+  const k = canDisband(a) ? Math.min(sel.n, O.disbandMax(a)) : 0;
   if (k < 1) { hooks.toast(disbandReason(a)); return; }
   O.add({ type: 'disband', army: a.id, count: k });
 }
@@ -213,7 +214,7 @@ const act = name => ({ dec: () => step(-1), inc: () => step(1), q1: () => setN(1
 function setN(v) { if (sel) { sel.n = Math.max(1, Math.min(nMax(), v)); renderToolbar(); if (hoverF) onHover(hoverF, null); } }
 function step(d) { if (sel) setN(sel.n + d); }
 const recruitReason = b => b.recLeft < 1 ? 'Rekrutierungslimit erreicht.' : 'Kein Gold mehr.';
-const disbandReason = a => O.moveOf(a.id) ? 'Alle übrigen Divisionen haben einen Zugbefehl.' : 'Keine Division zum Abrüsten.';
+const disbandReason = a => !canDisband(a) ? 'Abrüsten geht nur in eigenen Städten.' : O.moveOf(a.id) ? 'Alle übrigen Divisionen haben einen Zugbefehl.' : 'Keine Division zum Abrüsten.';
 
 // ---------- keyboard ----------
 function onKey(e) {
@@ -257,7 +258,7 @@ function renderToolbar() {
   if (canRecruitHere()) row += btn('rec', `Rekrutieren +${Math.max(1, Math.min(sel.n, b.canRecruit))}`, 'R', b.canRecruit > 0, recruitReason(b));
   if (a) {
     const dm = O.disbandMax(a);
-    row += btn('dis', `Abrüsten ${Math.max(1, Math.min(sel.n, dm))}`, 'D', dm > 0, disbandReason(a));
+    row += btn('dis', `Abrüsten ${Math.max(1, Math.min(sel.n, dm))}`, 'D', dm > 0 && canDisband(a), disbandReason(a));
     row += btn('fm', `Gewaltmarsch ${O.fmOn(a) ? 'aus' : 'an'}`, 'G', true, '');
     if (O.marching(a)) row += btn('halt', 'Halt', 'H', true, '');
   }

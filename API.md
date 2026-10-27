@@ -8,7 +8,8 @@ odd c → `(c,r-1),(c,r+1),(c-1,r-1),(c-1,r),(c+1,r-1),(c+1,r)`; even c → `(c,
 - **Player id = nation code** (`"GB"`, `"FR"` …). One player per nation. Nations nobody picked are **neutral**
   (their provinces get owner `null`).
 - Passable for land armies in milestone 1: fields whose token is a province code. `~~`, `##`, `..`, `?XX` are not passable.
-- Gold is an integer. Upkeep is rounded on the nation total (`upkeep_rounding`).
+- Gold may have decimals (JSON int when whole, else float; computed exactly). Upkeep is rounded on the nation total
+  only if `upkeep_rounding` is not `none` (default `none`).
 - Army ids are strings `"a1"`, `"a2"` … from `state.next_army_id`.
 
 ## 2. Engine API (`engine/__init__.py` exports these)
@@ -16,7 +17,7 @@ odd c → `(c,r-1),(c,r+1),(c-1,r-1),(c-1,r),(c+1,r-1),(c+1,r)`; even c → `(c,
 load_map(folder: str | Path) -> dict            # parsed + validated map.json (raises MapError)
 load_rules(map_rules: dict, overrides: dict) -> dict   # rules/default.json <- map "rules" <- lobby overrides
 new_game(map_data, players: dict[str, str], rules: dict, seed: int) -> GameState
-    # players: {nation: player_name}. Runs the start of turn 1 (income, upkeep, player order).
+    # players: {nation: player_name}. Runs the start of turn 1 (player order). Income is paid in the gold phase.
 validate_orders(state, player_id, orders: list[dict]) -> list[list[str]]
     # one list of German error strings per order (empty = valid), checked in entry order against the
     # current state (gold total, recruit limit, ranges, paths, ownership …)
@@ -47,8 +48,8 @@ GameState.to_dict() / GameState.from_dict(d)                    # JSON-safe, rou
 ## 4. Orders (dicts, `type` is the registry key)
 | type | fields | phase |
 |---|---|---|
-| `send_gold` | `to`, `amount` | transfers |
-| `give_province` | `province`, `to` | transfers |
+| `send_gold` | `to`, `amount` | gold |
+| `give_province` | `province`, `to` | gold |
 | `recruit` | `field`, `count` | recruitment |
 | `disband` | `army`, `count` | recruitment |
 | `forced_march` | `army`, `on` (bool) | movement (all toggles first, then moves) |
@@ -82,8 +83,9 @@ Each event: `{"kind": ..., "player": pid|null, "text": "German one-liner", ...ex
 `fight` (`field`, `attacker`, `defender`, `attacker_losses`, `defender_losses`, `winner`: pid|null),
 `conquest` (`province`, `field`, `cost`, `old_owner`), `conquest_failed` (`province`, `field`, `cost`, `back_to`),
 `skipped` (`order`, `reason`).
-Income/upkeep events of the new turn start come last.
-**Snapshots:** after each order of the transfers/recruitment/movement phases (applied or skipped) the *last* event that
+Income/upkeep events come at the start of the gold phase (after recruitment, before movement); `turn_start` comes last.
+`fight.winner` is a player, `null` (both destroyed) or `"both"` (both survive, G59).
+**Snapshots:** after each order of the recruitment/gold/movement phases (applied or skipped) the *last* event that
 order produced carries `"snap": {"armies": {id: {id, owner, field, divisions, fresh, forced_march}}, "owners": {province: owner}}`
 = the whole board right after that order. So all events up to and including one with a `snap` form one group (a move with
 its fight, conquest and merge). Unknown-order `skipped` events and the start-of-turn block have no snap.
@@ -98,7 +100,8 @@ its fight, conquest and merge). Unknown-order `skipped` events and the start-of-
 Based on the current board (ignores other orders).
 
 ## 7. board rows
-`{"player": "GB", "name": "Felix", "provinces": 9, "share": 0.14, "income": 22, "upkeep": 4, "armies": 2, "divisions": 7}`
+`{"player": "GB", "name": "Felix", "provinces": 9, "fields": 40, "share": 0.14, "income": 22, "upkeep": 1.75, "armies": 2, "divisions": 7}`
+– `share` = share of all land fields (victory measure, RULES.md section 11).
 `upkeep` = what the player would pay at the next turn start with the current armies.
 
 ## 8. HTTP API (`server/app.py`, FastAPI, JSON). Token = secret per player, passed as `?token=`.

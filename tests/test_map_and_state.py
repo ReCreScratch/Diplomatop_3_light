@@ -42,7 +42,7 @@ def test_missing_map_file(tmp_path):
 def test_rules_merge_order():
     rules = engine.load_rules({"start_gold": 20, "division_cost": 4}, {"division_cost": 5})
     assert rules["start_gold"] == 20 and rules["division_cost"] == 5
-    assert rules["phases"] == ["transfers", "recruitment", "movement"]
+    assert rules["phases"] == ["recruitment", "gold", "movement"]
     assert engine.load_rules({}, {})["start_gold"] == 10
 
 
@@ -51,6 +51,7 @@ def test_rules_have_all_section_13_settings():
     for key in ("division_cost", "disband_refund", "upkeep_per_division", "upkeep_per_army", "upkeep_rounding",
                 "allow_spending_into_debt", "recruit_limit_per_province", "recruits_can_move_same_turn",
                 "move_range", "forced_march_range", "forced_march_combat_value", "strength_rounding",
+                "survivor_rounding",
                 "combat_formula", "conquest_cost_factor", "conquest_allow_army_used_up", "turn_order_rule",
                 "turn_timer_seconds", "start_gold", "show_other_players_gold", "gift_delay_turns",
                 "victory_share_single", "victory_share_alliance", "transport_combat_value",
@@ -96,9 +97,22 @@ def test_different_seeds_differ():
     assert len(results) > 1
 
 
-def test_turn_order_no_repeat_first_last():
+def test_turn_order_no_repeat_position():
     for seed in range(5):
         state = make_game(players=("AA", "BB", "CC"), seed=seed)
+        previous = list(state.player_order)
+        for _ in range(25):
+            engine.resolve_turn(state, {})
+            now = state.player_order
+            assert sorted(now) == ["AA", "BB", "CC"]
+            assert all(a != b for a, b in zip(now, previous))
+            assert state.prev_player_order == previous
+            previous = list(now)
+
+
+def test_turn_order_no_repeat_first_last():
+    for seed in range(5):
+        state = make_game(players=("AA", "BB", "CC"), seed=seed, turn_order_rule="no_repeat_first_last")
         previous = list(state.player_order)
         for _ in range(25):
             engine.resolve_turn(state, {})
@@ -125,4 +139,4 @@ def test_turn_order_two_players_alternate():
 
 def test_turn_order_registry():
     from engine.turn_order import TURN_ORDER_RULES
-    assert "no_repeat_first_last" in TURN_ORDER_RULES
+    assert {"no_repeat_position", "no_repeat_first_last"} <= set(TURN_ORDER_RULES)

@@ -111,7 +111,7 @@ function renderBoard() {
   const G = ctx.G, old = $('b-amt'), keep = old ? { v: old.value, focus: document.activeElement === old } : null;
   if (sendTo && !G.players[sendTo]) sendTo = null;
   const maxSend = O.budget().canSend;
-  let h = '<tr><th>Spieler</th><th>Prov.</th><th>%</th><th>Eink.</th><th>Unterh.</th><th>Arm.</th><th>Div.</th></tr>';
+  let h = '<tr><th>Spieler</th><th>Prov.</th><th title="Anteil an allen Landfeldern">% Land</th><th>Eink.</th><th>Unterh.</th><th>Arm.</th><th>Div.</th></tr>';
   for (const r of G.board || []) {
     const pend = O.book.list.map((o, i) => [o, i]).filter(([o]) => (o.type === 'send_gold' || o.type === 'give_province') && o.to === r.player)
       .map(([o, i]) => {

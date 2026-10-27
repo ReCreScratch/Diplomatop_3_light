@@ -21,7 +21,7 @@ export function budget() {
   return {
     gold, recruits, limit, recLeft,
     canRecruit: Math.min(recLeft, debt ? Infinity : Math.floor(Math.max(0, gold) / r.division_cost)),
-    canSend: debt ? Infinity : Math.max(0, gold),
+    canSend: debt ? Infinity : Math.floor(Math.max(0, gold)),
   };
 }
 const sum = (type, army, f = 'count') => book.list.reduce((s, o) => s + (o.type === type && o.army === army ? o[f] : 0), 0);

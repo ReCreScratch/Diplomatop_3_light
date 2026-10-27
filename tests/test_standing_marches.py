@@ -123,8 +123,9 @@ def test_fresh_divisions_stay_behind():
 
 def test_disband_all_removes_route():
     state = make_game()
-    put(state, "AA", A1_CAP, 2)
-    turn(state, AA=[move("a1", 2, A1_MID, A2_CAP)])
+    put(state, "AA", A1_MID, 2)
+    turn(state, AA=[move("a1", 2, A2_CAP, N1_CAP)])   # stops on the own city A2 with a route left
+    assert state.armies["a1"]["route"] == [N1_CAP]
     turn(state, AA=[{"type": "disband", "army": "a1", "count": 2}])
     assert not state.armies
     assert engine.GameState.from_dict(state.to_dict()).armies == {}

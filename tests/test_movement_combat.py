@@ -1,6 +1,6 @@
 """Movement, forced march, combat and conquest."""
 import engine
-from engine.combat import default_formula
+from engine.combat import hp_attrition, strength_formula
 from fractions import Fraction
 
 from conftest import (A1_CAP, A1_MID, A2_CAP, B1_CAP, B2_CAP, C1_CAP, N1_CAP, SEA, kinds, make_game, of_kind, put)
@@ -223,12 +223,12 @@ def test_entry_order_within_player():
 # --- combat ---------------------------------------------------------------
 def test_rules_example_10_forced_march_vs_4():
     state = make_game()
-    put(state, "AA", A1_CAP, 10, forced_march=True)
+    put(state, "AA", A1_CAP, 10, forced_march=True)   # deals 5, has 10 hit points
     put(state, "BB", A1_MID, 4)
     events = engine.resolve_turn(state, {"AA": [move("a1", 10, A1_MID)]})
     fight = of_kind(events, "fight")[0]
-    assert (fight["attacker_losses"], fight["defender_losses"], fight["winner"]) == (8, 4, "AA")
-    assert state.armies["a1"]["divisions"] == 2 and state.armies["a1"]["field"] == A1_MID
+    assert (fight["attacker_losses"], fight["defender_losses"], fight["winner"]) == (4, 4, "AA")
+    assert state.armies["a1"]["divisions"] == 6 and state.armies["a1"]["field"] == A1_MID
     assert fight["field"] == A1_MID and fight["attacker"] == "AA" and fight["defender"] == "BB"
     assert fight["text"].startswith("Kampf bei Nordaland:")
 
@@ -241,9 +241,17 @@ def test_equal_strength_both_die():
     assert not state.armies and of_kind(events, "fight")[0]["winner"] is None
 
 
-def test_min_strength_one():
+def test_single_forced_march_division_loses():
     state = make_game()
-    put(state, "AA", A1_CAP, 1, forced_march=True)  # floor(0.5) = 0 -> 1
+    put(state, "AA", A1_CAP, 1, forced_march=True)  # deals 0.5: the defender keeps 0.5 hit points -> 1 division
+    put(state, "BB", A1_MID, 1)
+    engine.resolve_turn(state, {"AA": [move("a1", 1, A1_MID)]})
+    assert list(state.armies) == ["a2"] and state.armies["a2"]["divisions"] == 1
+
+
+def test_survivor_rounding_setting():
+    state = make_game(survivor_rounding="down")
+    put(state, "AA", A1_CAP, 1, forced_march=True)
     put(state, "BB", A1_MID, 1)
     engine.resolve_turn(state, {"AA": [move("a1", 1, A1_MID)]})
     assert not state.armies
@@ -257,12 +265,22 @@ def test_defender_wins_attacker_gone():
     assert list(state.armies) == ["a2"] and state.armies["a2"]["divisions"] == 3
 
 
-def test_defender_on_forced_march_has_halved_value():
+def test_both_survive_attacker_stays_back():
     state = make_game()
     put(state, "AA", A1_CAP, 3)
-    put(state, "BB", A1_MID, 4, forced_march=True)  # strength 2
+    put(state, "BB", A1_MID, 4, forced_march=True)  # deals 2
+    events = engine.resolve_turn(state, {"AA": [move("a1", 3, A1_MID)]})
+    assert of_kind(events, "fight")[0]["winner"] == "both"
+    assert state.armies["a1"]["divisions"] == 1 and state.armies["a1"]["field"] == A1_CAP   # G59
+    assert state.armies["a2"]["divisions"] == 1 and state.armies["a2"]["field"] == A1_MID
+
+
+def test_split_part_that_survives_merges_back():
+    state = make_game()
+    put(state, "AA", A1_CAP, 5)
+    put(state, "BB", A1_MID, 4, forced_march=True)
     engine.resolve_turn(state, {"AA": [move("a1", 3, A1_MID)]})
-    assert state.armies["a1"]["divisions"] == 1 and state.armies["a1"]["field"] == A1_MID
+    assert [(a["field"], a["divisions"]) for a in state.armies.values() if a["owner"] == "AA"] == [(A1_CAP, 3)]
 
 
 def test_fight_stops_movement():
@@ -271,19 +289,34 @@ def test_fight_stops_movement():
     put(state, "BB", A2_CAP, 2)
     events = engine.resolve_turn(state, {"AA": [move("a1", 10, A1_MID, A2_CAP, N1_CAP)]})
     army = state.armies["a1"]
-    assert army["field"] == A2_CAP and army["divisions"] == 6
+    assert army["field"] == A2_CAP and army["divisions"] == 8
     assert state.owners["N1"] is None
     assert of_kind(events, "move")[0]["to"] == A2_CAP
 
 
-def test_formula_function_directly():
-    one = Fraction(1)
-    assert default_formula(engine.load_rules({}, {}), 10, Fraction(1, 2), 4, one) == (8, 4)
-    assert default_formula(engine.load_rules({}, {}), 3, one, 3, one) == (3, 3)
+def side(divisions, value=1):
+    return {"divisions": divisions, "value": Fraction(value), "hp": Fraction(1)}
+
+
+def test_formula_functions_directly():
+    rules = engine.load_rules({}, {})
+    assert hp_attrition(rules, side(10, Fraction(1, 2)), side(4)) == (4, 4)
+    assert hp_attrition(rules, side(3), side(3)) == (3, 3)
+    assert hp_attrition(rules, side(3), side(5)) == (3, 3)
+    assert strength_formula(rules, side(10, Fraction(1, 2)), side(4)) == (8, 4)
+    assert strength_formula(rules, side(3), side(3)) == (3, 3)
+
+
+def test_old_3_0_formula_still_selectable():
+    state = make_game(combat_formula="strength_3_0")
+    put(state, "AA", A1_CAP, 10, forced_march=True)
+    put(state, "BB", A1_MID, 4)
+    engine.resolve_turn(state, {"AA": [move("a1", 10, A1_MID)]})
+    assert state.armies["a1"]["divisions"] == 2
 
 
 def test_strength_rounding_setting():
-    state = make_game(strength_rounding="up")
+    state = make_game(combat_formula="strength_3_0", strength_rounding="up")
     put(state, "AA", A1_CAP, 3, forced_march=True)  # ceil(1.5) = 2
     put(state, "BB", A1_MID, 2)
     engine.resolve_turn(state, {"AA": [move("a1", 3, A1_MID)]})
@@ -292,7 +325,7 @@ def test_strength_rounding_setting():
 
 def test_combat_formula_registry():
     from engine.combat import FORMULAS
-    assert "default" in FORMULAS
+    assert {"hp_attrition", "strength_3_0"} <= set(FORMULAS)
 
 
 # --- conquest -------------------------------------------------------------
@@ -307,11 +340,13 @@ def test_conquer_empty_neutral_capital():
 
 
 def test_conquered_province_gives_income_next_turn():
-    state = make_game(upkeep_per_army=0, upkeep_per_division=0)
+    state = make_game(upkeep_per_division=0)
     put(state, "AA", A2_CAP, 5)
     gold = state.players["AA"]["gold"]
     engine.resolve_turn(state, {"AA": [move("a1", 5, N1_CAP)]})
-    assert state.players["AA"]["gold"] == gold + 3 + 1 + 2
+    assert state.players["AA"]["gold"] == gold + 3 + 1   # gold phase ran before the conquest
+    engine.resolve_turn(state, {})
+    assert state.players["AA"]["gold"] == gold + 4 + 3 + 1 + 2
 
 
 def test_conquest_exactly_enough_army_used_up():
@@ -421,8 +456,8 @@ def test_preview_uses_pending_forced_march():
     put(state, "AA", N1_CAP, 6)
     put(state, "BB", B1_CAP, 2)
     result = engine.preview_move(state, "AA", "a1", 6, [B1_CAP], forced_march=True)
-    # strength 6 x 0.5 = 3 beats 2; the winner loses 2 / 0.5 = 4
-    assert result["fight"] == {"defender": "BB", "attacker_losses": 4, "defender_losses": 2, "winner": "AA"}
+    # deals 6 x 0.5 = 3 against 2 hit points; loses the 2 the defender deals
+    assert result["fight"] == {"defender": "BB", "attacker_losses": 2, "defender_losses": 2, "winner": "AA"}
     assert state.armies["a1"]["forced_march"] is False  # nothing changed
 
 
@@ -445,8 +480,8 @@ def test_board_rows():
     state = make_game()
     put(state, "AA", A1_CAP, 6)
     row = engine.board(state)[0]
-    assert row == {"player": "AA", "name": "p_AA", "provinces": 2, "share": 2 / 6, "income": 4,
-                   "upkeep": 4, "armies": 1, "divisions": 6}
+    assert row == {"player": "AA", "name": "p_AA", "provinces": 2, "fields": 9, "share": 9 / 24, "income": 4,
+                   "upkeep": 1.5, "armies": 1, "divisions": 6}
 
 
 def test_player_without_provinces_stays():

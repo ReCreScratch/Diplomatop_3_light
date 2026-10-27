@@ -24,6 +24,18 @@ def shuffled(players, rng):
     return order
 
 
+@register("no_repeat_position")
+def no_repeat_position(state, rng):
+    """Random; nobody gets the same position as last turn (4.0). If impossible, no restriction."""
+    prev = state.prev_player_order
+    tries = max(1, len(state.players)) ** 2 * 10   # enough: about 1/e of all orders qualify
+    for _ in range(tries):
+        order = shuffled(state.players, rng)
+        if not any(i < len(prev) and prev[i] == p for i, p in enumerate(order)):
+            return order
+    return shuffled(state.players, rng)
+
+
 @register("no_repeat_first_last")
 def no_repeat_first_last(state, rng):
     """Random; nobody first or last twice in a row. If impossible, no restriction."""

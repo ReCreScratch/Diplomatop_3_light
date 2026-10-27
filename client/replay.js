@@ -134,17 +134,19 @@ function finish(home) {
   R.panSmooth(home, 0);
 }
 
-// Groups end at the first event with a snap; unknown-order skips stand alone; the start-of-turn block is the rest.
+// Groups end at the first event with a snap; unknown-order skips stand alone; income/upkeep and the start-of-turn
+// block are the rest (shown on the closing banner).
 function split(events) {
-  const groups = []; let cur = [], rest = [];
+  const groups = [], econ = []; let cur = [], rest = [];
   events.forEach((e, i) => {
     if (rest.length || e.kind === 'turn_start') { rest.push(e); return; }
+    if (e.kind === 'income' || e.kind === 'upkeep') { econ.push(e); return; }
     if (e.kind === 'skipped' && !e.snap) { groups.push({ events: [e], snap: null }); return; }
     cur.push(e);
     if (e.snap) { groups.push({ events: cur, snap: e.snap }); cur = []; }
   });
   if (cur.length) groups.push({ events: cur, snap: null });
-  return { groups, rest };
+  return { groups, rest: econ.concat(rest) };
 }
 function incomeLine(rest) {
   const me = ctx.G.me, f = k => rest.filter(e => e.kind === k && e.player === me).reduce((s, e) => s + e.amount, 0);

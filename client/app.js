@@ -111,9 +111,9 @@ function ruleLines(r) {
   const t = r.turn_timer_seconds;
   return [
     ['Startgold', r.start_gold], ['Kosten pro Division', r.division_cost],
-    ['Unterhalt', `${r.upkeep_per_division} je Division + ${r.upkeep_per_army} je Armee`],
+    ['Unterhalt', `${r.upkeep_per_division} je Division${r.upkeep_per_army ? ` + ${r.upkeep_per_army} je Armee` : ''}`],
     ['Bewegung', `${r.move_range} Feld(er)`], ['Gewaltmarsch', `bis ${r.forced_march_range} Felder`],
-    ['Rekrutierung', `max. ${r.recruit_limit_per_province} je Provinz`],
+    ['Rekrutierung', `in eigenen Städten, max. ${r.recruit_limit_per_province} je Provinz`],
     ['Zugtimer', t ? `${t} s` : 'kein Timer'],
   ].map(([k, v]) => `<li><span>${k}:</span> ${esc(v)}</li>`).join('');
 }

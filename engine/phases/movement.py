@@ -77,6 +77,8 @@ def execute_move(state, army, count, path, events, rest=(), goal=None, auto=Fals
     events.append(make_event("move", player, text, army=mover["id"], **{"from": start}, path=walked,
                              to=target, count=count, **({"auto": True} if auto else {})))
     if enemy and fight(state, mover, enemy, events) != player:
+        if mover["id"] in state.armies:   # both survived: the attacker stays where it came from (G59)
+            merge_standing(state, mover, events)
         return
     mover["field"] = list(target)
     code = conquest_target(state, target, player)

@@ -2,7 +2,7 @@
 from .combat import preview_fight
 from .conquest import can_pay, conquest_cost, conquest_target
 from .orders import Move, Pending, plural, range_of
-from .phases.start_of_turn import income_of, upkeep_of
+from .phases.gold import income_of, upkeep_of
 
 
 def empty_preview(errors):
@@ -56,14 +56,19 @@ def preview_move(state, player, army_id, count, path, forced_march=None):
 
 
 def board(state):
-    """One public row per player."""
-    total = len(state.owners)
+    """One public row per player. share = share of all land fields (victory measure, 4.0)."""
+    sizes = {}
+    for token in state.cells.values():
+        if token in state.owners:
+            sizes[token] = sizes.get(token, 0) + 1
+    total = sum(sizes.values())
     rows = []
     for player, info in state.players.items():
         armies = [a for a in state.armies.values() if a["owner"] == player]
-        count = len(state.provinces_of(player))
-        rows.append({"player": player, "name": info["name"], "provinces": count,
-                     "share": count / total if total else 0, "income": income_of(state, player),
+        codes = state.provinces_of(player)
+        fields = sum(sizes.get(code, 0) for code in codes)
+        rows.append({"player": player, "name": info["name"], "provinces": len(codes), "fields": fields,
+                     "share": fields / total if total else 0, "income": income_of(state, player),
                      "upkeep": upkeep_of(state, player), "armies": len(armies),
                      "divisions": sum(a["divisions"] for a in armies)})
     return rows
