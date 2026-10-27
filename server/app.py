@@ -117,6 +117,14 @@ def create_app(save_dir=None, maps_dir=None):
     def rejoin_answer(gid: str, rid: str, token: str = "", body: dict = Body(...)):
         return games.rejoin_answer(gid, token, rid, bool(body.get("accept")))
 
+    @app.get("/api/games/{gid}/stats")
+    def stats(gid: str, token: str = ""):
+        return games.stats(gid, token)
+
+    @app.get("/api/games/{gid}/history")
+    def history(gid: str, token: str = ""):
+        return games.history(gid, token)
+
     @app.get("/")
     def index():
         return FileResponse(ROOT / "client" / "index.html")

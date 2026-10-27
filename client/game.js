@@ -6,6 +6,7 @@ import * as In from './input.js';
 import * as Chat from './chat.js';
 import * as Replay from './replay.js';
 import * as Session from './session.js';
+import * as Stats from './stats.js';
 import { api } from './api.js';
 import { $, esc, ctx, setState, P, nName, pName, ownArmyAt, fieldName, allianceOf, noAttackOn } from './ctx.js';
 
@@ -19,6 +20,7 @@ export function startGame(gid, token) {
   In.init({ toast, onEscape: () => { if (Replay.active()) Replay.skip(); } });
   Replay.init({ onEnd: () => { R.drawMap(ctx.G); In.clearPreviews(); refresh(); } });
   $('btn-ready').onclick = toggleReady;
+  $('winbar').onclick = e => { if (e.target.closest('[data-stats]')) Stats.open(); };
   $('board').onclick = onBoardClick;
   $('board').onkeydown = e => { if (e.key === 'Enter' && e.target.id === 'b-amt') sendGold(); };
   $('board').oninput = e => { if (e.target.id === 'b-amt') clampAmount(e.target); };
@@ -113,6 +115,7 @@ function renderVictory() {
   win.hidden = !G.winner && G.status !== 'finished';
   if (!G.winner && G.status === 'finished') win.innerHTML = 'Spiel beendet – alle Spieler haben das Spiel verlassen.';
   if (G.winner) win.innerHTML = `Spiel beendet – <b>${esc(who(G.winner.players))}</b> ${G.winner.players.length > 1 ? 'gewinnen' : 'gewinnt'} in Runde ${G.winner.turn}${G.winner.alliance ? ' (Bündnis)' : ''}.`;
+  if (G.status === 'finished') win.insertAdjacentHTML('beforeend', ' <button data-stats="1" class="primary" title="Auswertung, Karten, Verläufe und Video">Statistik</button>');
 }
 function tickTimer() {
   const G = ctx.G;

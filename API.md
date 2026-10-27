@@ -1,4 +1,4 @@
-# Diplomatio 3.0 – Interface contract (milestones 1–4)
+# Diplomatio 3.0 – Interface contract (milestones 1–5)
 
 Binding contract between `engine/`, `server/` and `client/`. Rules: [RULES.md](RULES.md). Plan: [IMPLEMENTATION.md](IMPLEMENTATION.md).
 Coordinates are always `[c, r]` lists in JSON. Neighbours (flat-top, odd columns raised half a field):
@@ -33,6 +33,8 @@ resolve_turn(state, orders: dict[str, list[dict]]) -> list[dict]
     # Invalid orders at resolution time are skipped with a "skipped" event, never raise.
 preview_move(state, player_id, army_id, count, path) -> dict    # section 6
 board(state) -> list[dict]                                      # section 7
+compute_stats(map_data, rules, history, chat=None, meta=None) -> dict      # section 9
+    # pure statistics from the game archive (server/ stores it, section 8); STATS_VERSION = int, bumped when the output changes
 GameState.to_dict() / GameState.from_dict(d)                    # JSON-safe, round-trips exactly
 ```
 
@@ -122,18 +124,31 @@ Rule details beyond RULES.md (*[default]*):
 ## 5. Events (returned by `resolve_turn`, shown in the replay)
 Each event: `{"kind": ..., "player": pid|null, "text": "German one-liner", ...extra}`. Kinds and extras:
 `turn_start` (`player_order`), `income` (`amount`), `upkeep` (`amount`), `send_gold` (`to`, `amount`),
-`give_province` (`province`, `to`), `recruit` (`field`, `count`, `army`), `disband` (`army`, `field`, `count`),
-`forced_march` (`army`, `on`), `move` (`army`, `from`, `path`, `to`, `count`, optional `auto`: true), `halt` (`army`), `merge` (`army`, `into`, `field`),
-`fight` (`field`, `attacker`, `defender`, `attacker_losses`, `defender_losses`, `winner`: pid|null),
-`conquest` (`province`, `field`, `cost`, `old_owner`), `conquest_failed` (`province`, `field`, `cost`, `back_to`),
+`give_province` (`province`, `to`), `recruit` (`field`, `count`, `army`, `cost`), `disband` (`army`, `field`, `count`, `refund`, `unit`),
+`forced_march` (`army`, `on`), `move` (`army`, `from`, `path`, `to`, `count`, `unit`, `fleet`, `forced_march`, optional `auto`: true, optional `with` / `with_count` / `with_unit`), `halt` (`army`), `merge` (`army`, `into`, `field`),
+`fight` (`field`, `attacker`, `defender`, `attacker_losses`, `defender_losses`, `winner`: pid|null, plus the raw record below),
+`conquest` (`province`, `field`, `cost`, `old_owner`, `army`, `divisions`, `lost`), `conquest_failed` (`province`, `field`, `cost`, `back_to`, `army`, `divisions`, `lost`: 0),
 `skipped` (`order`, `reason`). Milestone 3: `no_attack` (`to`, `on`, `mutual`), `alliance` (`alliance`, `members`; founded,
 joined or changed), `leave` (`alliance`), `alliance_end` (`alliance`), `buy` (`province`, `to` = buyer, `seller`, `price`),
-`move_blocked` (`army`, `field`), `victory_progress` (`players`, `turns`, `need`), `victory` (`players`, `alliance`).
+`move_blocked` (`army`, `field`, `count`), `victory_progress` (`players`, `turns`, `need`), `victory` (`players`, `alliance`).
 Milestone 4: `surrender` and `kick` (`player` = the nation; only returned by `make_ai`, the server shows them as notices).
 Diplomacy events come first (with snaps); `alliance`/`leave`-removal/`alliance_end`/`victory*` at the end of the
 resolution have no snap. `invite` and `offer_sale` produce no event.
 Income/upkeep events come at the start of the gold phase (after recruitment, before movement); `turn_start` comes last.
 `fight.winner` is a player, `null` (both destroyed) or `"both"` (both survive, G59).
+Milestone 5 added fields (raw data for the statistics, only ever added, nothing renamed):
+- `build_ship` (`field`, `count`, `army`, `cost`) like `recruit`; `cost` = gold actually paid (AI recruits: `cost` 0, `ai` true).
+  `disband.refund` = gold paid back, `disband.unit` = unit type key (`division` / `ship`).
+- `move.path` = the fields actually walked (start excluded), `move.count` the moving part, `unit` its type key, `fleet` bool,
+  `forced_march` the mover's flag; with a linked partner `with` (id), `with_count` and `with_unit` describe the partner, which
+  moves along the same path. Division-fields marched = `count` x `len(path)`; per-field traffic uses the fields of `path`.
+- `fight.sea` = the fight involves the sea; `fight.attacker_units` / `defender_units` = one record per unit before the fight:
+  `{army, owner, unit, fleet, count, value, forced_march, transport, lost}` (`value` = combat value per division or ship that was
+  used, `transport` = a land unit fighting at sea with the transport value, `lost` = divisions or ships lost); `attacker_damage` /
+  `defender_damage` = total combat value of the side; `attacker_divisions_lost`, `attacker_ships_lost`, `defender_divisions_lost`,
+  `defender_ships_lost` split the losses. `losses` (unit id -> lost) and the old fields are unchanged. Several defender units may
+  belong to different (allied) owners; `defender` is the first one's owner.
+- `conquest.lost` = divisions the conquest cost (= `cost`), `divisions` = the army's size before paying; `conquest_failed.lost` is 0.
 **Snapshots:** after each order of the recruitment/gold/movement phases (applied or skipped) the *last* event that
 order produced carries `"snap": {"armies": {id: {id, owner, field, divisions, fresh, forced_march}}, "owners": {province: owner}}`
 = the whole board right after that order. So all events up to and including one with a `snap` form one group (a move with
@@ -179,6 +194,25 @@ AI nations get a row too, with `"ai": true` and `name` = `"KI"` or `"KI (former 
 | `POST /api/games/{gid}/ready?token=` | `{ready: bool}` → `{ok: true}` |
 | `POST /api/games/{gid}/preview?token=` | `{army, count, path, forced_march?}` (setting after pending toggle) → preview_move result |
 | `POST /api/games/{gid}/chat?token=` | `{to: nation\|null, text, marks?: [{kind:"field", f:[c,r]} \| {kind:"arrow", path:[[c,r],...]}]}` → `{ok, message}`. `to: null` = public channel. Running game only. |
+| `GET /api/games/{gid}/stats?token=` | **finished games only** (else 400 "Die Statistik gibt es erst am Spielende."): `compute_stats` of the archive and the game's chat, plus `nations` = {code: {name, player}}, `map` (name) and `video_seconds_per_turn`. The token is optional; a given token must belong to a member or spectator (403 otherwise). Cached in `saves/{gid}.stats.json` as `{key: {version, rows, chat}, result}`; a different `STATS_VERSION`, archive length or chat length recomputes it. |
+| `GET /api/games/{gid}/history?token=` | finished games only (same rules): the raw archive rows as a JSON list (see below). A game without an archive gives `[]`. |
+
+Archive (milestone 5, RULES.md 12 "Recording"): `saves/{gid}.history.jsonl`, one JSON object per line, appended (append mode) at the end
+of every `resolve_turn` before the next turn starts. Turn rows:
+```json
+{"turn": 3, "player_order": ["FR", "GB"], "before": {"armies": {}, "owners": {}},
+ "gold_before": {"GB": 12}, "gold_after": {"GB": 9.5}, "orders": {"GB": [{"type": "recruit", "field": [16, 3], "count": 1}]},
+ "events": [], "alliances": {}, "no_attack": {}, "ai": {}, "timeouts": ["FR"], "ready_at": {"GB": 41.2, "FR": null},
+ "started": 1760000000.1, "resolved": 1760000060.4}
+```
+`before` = the board at the start of the turn (as `last_turn.before`); `orders` = the raw submitted orders of every player (valid or not);
+`events` = all events of the resolution **without** their `snap`; `alliances` / `no_attack` / `ai` = the state after the resolution;
+`ready_at` = seconds from the turn's start until each player last set Ready (`null` = never, e.g. timeout); `started` / `resolved` = unix time.
+When the game ends (victory, or the last player leaves) one more row is appended:
+`{"final": true, "turn": 14, "ts": 1760001000.0, "board": {"armies": {}, "owners": {}}, "gold": {"GB": 40}, "winner": {...}|null, "alliances": {}, "ai": {}, "players": {"GB": "Felix"}}`
+(`players` = nation -> player name of everybody who joined). A turn archived twice (crash between archive and save) keeps its last copy.
+The save (`saves/{gid}.json`) also holds `turn_started` and `ready_at` so a restart keeps the timing. Old games have no archive; their
+`/stats` answer has `"empty": true`. The archive and the statistics stay unreachable until the game is finished.
 
 State view:
 ```json
@@ -214,6 +248,7 @@ Milestone 3 view fields: `alliances` (all, public), `no_attack` (all, public), `
 `victory` = `{"leader": {kind, id, players, turns} | null, "need": victory_hold_turns}`, `winner` (null or `{players, alliance, turn}`).
 When the game is won `status` becomes `"finished"`: `PUT orders`, `ready` and `preview` answer 400 "Das Spiel ist beendet.",
 the state and chat stay readable (chat still works).
+A finished game's `status` is the signal for the client to offer the statistics (`GET stats` / `GET history`, section 8; the end banner gets a "Statistik" button).
 While `status == "lobby"`, `GET state` returns only `{changed, version, status}`; the client uses `/lobby` there.
 Errors: HTTP 400 (bad input), 403 (wrong token / not host), 404 (unknown game), body `{"detail": "German text"}`.
 `fresh` in armies counts only divisions recruited in earlier resolutions of this turn; the client adds pending
@@ -225,3 +260,36 @@ Saves: `saves/{gid}.json` after every change (state + members/tokens + orders + 
 Milestone 4 changed the save layout from `tokens` / `joined` / `host` to `members: [{id, token, name, nation, host}]`; saves of the old layout are converted
 on load. Static files: also `/editor` → `client/editor.html`.
 Run: `python -m uvicorn server.app:app --host 0.0.0.0 --port 8000`.
+
+## 9. Statistics (`engine/stats.py`, milestone 5)
+`compute_stats(map_data, rules, history, chat=None, meta=None)` is pure and recomputes everything from the archive rows
+(section 8) each time, so a new statistic also works for old games. `history` = turn rows, optionally followed by the `final` row
+(`None` / `[]` = empty). `chat` = the game's chat messages (only `from` / `to` are read, never the text). `meta` = `{"players": {nation: name}}`.
+Result (JSON-safe; nation codes are keys; `order` lists all map nations):
+```json
+{"version": 1, "empty": false, "order": ["GB", "FR"], "axis": [1, 2, 3], "players": {"GB": "Felix", "FR": null},
+ "series": {"gold": {"GB": [10, 9.5, 12]}},
+ "totals": {"GB": {"gold_earned": 40, "kills": 7, "orders_given": {"move": 4}, "status": "player"}},
+ "kills": {"GB": {"FR": {"divisions": 5, "ships": 2}}},
+ "chat_matrix": {"GB": {"all": 3, "FR": 1}},
+ "heat": {"fights": {"3,4": 2}},
+ "game": {"turns": 2, "final_turn": 3, "started": 1760000000.1, "ended": 1760000100.0, "duration_seconds": 99.9, "winner": null,
+          "biggest_fight": {"turn": 2, "field": [3, 4], "attacker": "GB", "defender": "FR", "units": 9}, "most_contested_province": {"province": "FR1", "name": "...", "changes": 2},
+          "bloodiest_field": {"field": [3, 4], "units": 6}},
+ "titles": [{"title": "Schlächter", "nation": "GB", "value": 7, "metric": "kills"}]}
+```
+- `axis` = turn numbers of the board snapshots (one per archived turn: the board at its start, then the end board). Every series
+  list has one value per axis point. Series (`SERIES` registry): `gold` (start of the turn; `null` for nations without a player),
+  `income`, `upkeep`, `gold_sent`, `gold_received` (flows of the resolved turn; `null` at the end board), and from the boards `provinces`,
+  `fields`, `share` (of all land fields, 0..1), `cities`, `ports`, `armies`, `divisions`, `ships`, `divisions_at_sea`.
+- `totals` (`TOTAL_KEYS` + `avg_ready_seconds`, `peak_share`, `peak_share_turn`, `knocked_out_turn` (null if never), `status` (`player` / `unpicked` /
+  `surrender` / `kick`), `ai_since_turn`, `orders_given` / `orders_skipped` = {order type: count}): gold earned / upkeep / spent on recruits, ships and
+  purchases / sales income / refunds / sent / received; recruited, disbanded, ships built / disbanded, divisions lost in fights and conquests, ships
+  lost, `kills_divisions` / `kills_ships`; fights as attacker and defender, `won` / `lost` / `both` (both destroyed counts as lost), conquests, failed
+  conquests, provinces lost, gifts and sales, `fields_marched` (division-fields), `ship_fields_marched`, forced marches (`forced_march_toggles`, `forced_march_moves`),
+  `standing_march_steps` (auto `move` events), `blocked_moves`, `timeouts`, chat counts, alliances joined / left; derived: `units_lost`, `kills`,
+  `units_recruited`, `gold_traded` (sent + sales), `chat_total`.
+- `kills[attacker][victim]` = {divisions, ships}; the killer of a fight is the side that dealt the damage (allied defenders: the first defender's nation gets the credit).
+- `heat[metric]["c,r"]`: `divisions_died` (fights and conquest costs), `ships_died`, `fights`, `conquests`, `recruits` (divisions and ships), `traffic` (divisions walking over a field).
+- `titles`: best nation per category (`TITLES`), skipped when nobody has a value > 0 (`Blitzmerker` = lowest `avg_ready_seconds`); `tied` lists equal nations.
+- How to add a statistic: see the module docstring (`@on(kind)` handlers, `@series(name)`, `@derived`, `TITLES`).

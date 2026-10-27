@@ -48,4 +48,4 @@ def recruit(state, events):
             events.append(make_event("recruit", nation,
                                      f"{state.nation_name(nation)} (KI) rekrutiert {plural(count, 'Division', 'Divisionen')} "
                                      f"in {state.place_name(field)}.", field=list(field), count=count, army=army["id"],
-                                     ai=True, snap=snapshot(state)))
+                                     cost=0, ai=True, snap=snapshot(state)))

@@ -6,9 +6,10 @@ from .phases.start_of_turn import start_turn
 from .preview import board, preview_move
 from .resolve import resolve_turn
 from .state import GameState
+from .stats import STATS_VERSION, compute_stats
 
 __all__ = ["MapError", "load_map", "load_rules", "validate_map", "new_game", "validate_orders", "resolve_turn",
-           "preview_move", "board", "make_ai", "GameState"]
+           "preview_move", "board", "make_ai", "GameState", "compute_stats", "STATS_VERSION"]
 
 
 def new_game(map_data, players, rules, seed, ai=()):

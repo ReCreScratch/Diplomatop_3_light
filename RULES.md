@@ -355,9 +355,26 @@ Resolution gets a **diplomacy phase** before the recruitment phase: diplomacy â†
      game menu; entering it on the join screen (instead of asking the host) gives a new token at once. The code works once and
      is then replaced by a new one; after 8 wrong codes in 60 seconds the game refuses further tries for a while. The code is
      server-generated and not a gameplay number.
-- **Video** *[4.0]*: a screenshot of the map is stored at the end of every turn; at the end of the game they are
-  exported as an mp4 video. *(not built yet)*
-- **End-of-game statistics** *[4.0]* (section 9): not built yet.
+- **Recording** *[default, milestone 5]*: after every resolved turn the server appends one line to the game's archive
+  (`saves/{gid}.history.jsonl`). It holds the raw data, not finished numbers, so new statistics can be computed later
+  for old games too: the board before the turn (armies, owners), every player's gold before and after, all submitted
+  orders, all events (without the replay snaps), alliances and do-not-attack lists, timeouts, when each player was ready,
+  and the real time of the turn. The end board is stored once when the game ends. Chat is counted from the save (who
+  wrote to whom and how much, never the text). Everything stays secret until the game is finished.
+- **Video** *[4.0, changed: default, milestone 5]*: instead of a screenshot per turn the archive keeps the board of every
+  turn. At the end of the game the browser draws each turn with the current theme and records it as a video
+  (mp4 where the browser can, else webm), `video_seconds_per_turn` per turn, with the turn number and land shares shown.
+- **End-of-game statistics** *[4.0, default, milestone 5]* (section 9): shown to everyone once the game is finished and
+  computed from the archive. Per nation and turn (curves): gold, income, upkeep, gold sent / received, provinces,
+  land fields, share, cities, ports, armies, divisions, ships, divisions at sea. Totals per nation: gold earned and
+  spent (recruits, ships, purchases), sales income, divisions recruited / disbanded / lost (in fights, in conquests),
+  ships built / lost, enemy divisions and ships destroyed (also per opponent), fights as attacker / defender, won /
+  lost / both survived, conquests and failed conquests, provinces lost, gifts and sales, division-fields marched,
+  forced marches, standing-march steps, blocked moves, orders given and skipped (by type), timeouts, average time
+  until ready, chat messages, peak share and its turn, turn the nation was knocked out, alliances. Per field
+  (heatmaps): divisions died, ships died, fights, conquests, recruits, traffic (divisions passing). Game: turns,
+  real duration, winner, biggest fight, most contested province. A few titles for the best in a category
+  (e.g. most enemy units destroyed). Raw archive and computed statistics can be downloaded as JSON.
 
 ## 13. Rules config â€“ all settings and their starting values
 
@@ -402,6 +419,7 @@ Resolution gets a **diplomacy phase** before the recruitment phase: diplomacy â†
 | `alliance_min_turns` | 10 | turns since the alliance's last change of members before it can win, milestone 3 |
 | `nation_reveal_pause_seconds` | 1 | seconds between revealed nations in a random draw, milestone 4 |
 | `idle_warning_seconds` | 40 | seconds without input before the Ready prompt, milestone 4 |
+| `video_seconds_per_turn` | 1 | seconds each turn is shown in the end-of-game video, milestone 5 |
 | `nations.<code>.start_gold` | â€“ | per nation in `map.json`, overrides `start_gold` (set in the editor), milestone 4 |
 
 ## 14. Open questions

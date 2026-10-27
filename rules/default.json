@@ -30,6 +30,7 @@
   "ai_recruit_per_city": 1,
   "nation_reveal_pause_seconds": 1,
   "idle_warning_seconds": 40,
+  "video_seconds_per_turn": 1,
   "transport_combat_value": 0.25,
   "transport_move_range": 1,
   "fleet_move_range": 3,

@@ -37,14 +37,17 @@ def conquer(state, army, code, back_to, events):
         army["field"] = list(back_to)
         events.append(make_event("conquest_failed", army["owner"],
                                  f"{name} kann {prov} nicht erobern ({cost} Divisionen nötig) und weicht zurück.",
-                                 province=code, field=field, cost=cost, back_to=list(back_to)))
+                                 province=code, field=field, cost=cost, back_to=list(back_to), army=army["id"],
+                                 divisions=army["divisions"], lost=0))
         return False
     old_owner = state.owners[code]
     state.owners[code] = army["owner"]
     state.gifts = [g for g in state.gifts if g["province"] != code]   # conquered provinces count at once (11.5)
+    army_id, had = army["id"], army["divisions"]
     state.lose_divisions(army, cost)
     events.append(make_event("conquest", army["owner"],
                              (f"{name} erobert {prov} von {state.nation_name(old_owner)} (Kosten: {cost} Divisionen)." if old_owner
                               else f"{name} erobert das neutrale {prov} (Kosten: {cost} Divisionen)."),
-                             province=code, field=field, cost=cost, old_owner=old_owner))
+                             province=code, field=field, cost=cost, old_owner=old_owner, army=army_id,
+                             divisions=had, lost=cost))
     return True

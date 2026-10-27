@@ -100,7 +100,7 @@ def execute_move(state, army, count, path, events, rest=(), auto=False, group=Fa
                 army["route"] = rest
             events.append(make_event("move_blocked", player,
                                      f"{state.nation_name(player)}: Zug bleibt stehen, das Ziel ist von fremden Truppen besetzt.",
-                                     army=army["id"], field=start))
+                                     army=army["id"], field=start, count=count))
             return
     mover = split_off(state, army, count)
     partner = state.partner(mover) if group else None
@@ -109,7 +109,11 @@ def execute_move(state, army, count, path, events, rest=(), auto=False, group=Fa
     target = walked[-1]
     events.append(make_event("move", player, move_text(state, mover, count, target, auto, partner),
                              army=mover["id"], **{"from": start}, path=walked, to=target, count=count,
-                             **({"with": partner["id"]} if partner else {}), **({"auto": True} if auto else {})))
+                             unit=state.unit_of(mover), fleet=state.is_fleet(mover),
+                             forced_march=bool(mover.get("forced_march")),
+                             **({"with": partner["id"], "with_count": partner["divisions"],
+                                 "with_unit": state.unit_of(partner)} if partner else {}),
+                             **({"auto": True} if auto else {})))
     if enemies:
         at_sea = state.terrain_at(start) == "sea" or state.terrain_at(target) == "sea"
         won = fight(state, movers, enemies, target, at_sea, events) == player

@@ -209,7 +209,8 @@ class Recruit(Order):
 
     def apply(self, state, player, events):
         field, count = self.data["field"], self.data["count"]
-        state.players[player]["gold"] -= count * state.rules["division_cost"]
+        cost = count * state.rules["division_cost"]
+        state.players[player]["gold"] -= cost
         army = state.own_army_at(field, player)
         if army:
             army["divisions"] += count
@@ -219,7 +220,7 @@ class Recruit(Order):
         events.append(make_event("recruit", player,
                                  f"{state.nation_name(player)} rekrutiert {plural(count, 'Division', 'Divisionen')} "
                                  f"in {state.place_name(field)}.",
-                                 field=list(field), count=count, army=army["id"]))
+                                 field=list(field), count=count, army=army["id"], cost=cost))
 
 
 @register
@@ -250,7 +251,8 @@ class BuildShip(Order):
     def apply(self, state, player, events):
         field, count = self.data["field"], self.data["count"]
         unit = state.rules["sea_unit"]
-        state.players[player]["gold"] -= count * state.rules["ship_cost"]
+        cost = count * state.rules["ship_cost"]
+        state.players[player]["gold"] -= cost
         fleet = state.own_army_at(field, player, unit)
         if fleet:
             fleet["divisions"] += count
@@ -260,7 +262,7 @@ class BuildShip(Order):
         events.append(make_event("build_ship", player,
                                  f"{state.nation_name(player)} baut {plural(count, 'Schiff', 'Schiffe')} "
                                  f"bei {state.place_name(field)}.",
-                                 field=list(field), count=count, army=fleet["id"]))
+                                 field=list(field), count=count, army=fleet["id"], cost=cost))
 
 
 @register
@@ -289,13 +291,15 @@ class Disband(Order):
         army, count = state.armies[self.data["army"]], self.data["count"]
         field = list(army["field"])
         fleet = state.is_fleet(army)
-        state.players[player]["gold"] += count * state.rules["ship_disband_refund" if fleet else "disband_refund"]
+        refund = count * state.rules["ship_disband_refund" if fleet else "disband_refund"]
+        state.players[player]["gold"] += refund
+        unit = state.unit_of(army)
         state.lose_divisions(army, count)
         what = plural(count, "Schiff", "Schiffe") if fleet else plural(count, "Division", "Divisionen")
         events.append(make_event("disband", player,
                                  f"{state.nation_name(player)} löst {what} "
                                  f"bei {state.place_name(field)} auf.",
-                                 army=army["id"], field=field, count=count))
+                                 army=army["id"], field=field, count=count, refund=refund, unit=unit))
 
 
 @register

@@ -19,7 +19,8 @@ const txt = (parent, x, y, s, cls) => {
 export const centre = f => ({ x: f[0] * 1.5 * S + S, y: (f[1] + (f[0] % 2 ? 0 : 0.5)) * SQ3 * S + S });
 const corner = (x, y, i) => [x + S * Math.cos(i * Math.PI / 3), y + S * Math.sin(i * Math.PI / 3)];
 const hexPts = (x, y) => [0, 1, 2, 3, 4, 5].map(i => corner(x, y, i).map(v => v.toFixed(1)).join(',')).join(' ');
-export const colorOf = pid => (theme.nation_colors || {})[pid] || theme.neutral_color || '#888';
+const colorIn = (th, pid) => (th.nation_colors || {})[pid] || th.neutral_color || '#888';
+export const colorOf = pid => colorIn(theme, pid);
 
 export function init(svgEl, handlers) {
   svg = svgEl; H = handlers; svg.innerHTML = '';
@@ -104,21 +105,15 @@ function buildDefs() {
   mk('path', { d: 'M12 6V1.5l4 1.5-4 1.5', fill: '#8c2a1e', stroke: ink, 'stroke-width': 1, 'stroke-linejoin': 'round' }, sym);
 }
 
-function buildBase(state) {
-  buildDefs();
-  clear(L.base); polys = {};
-  const grid = rows = parseGrid(state.map.grid), P = state.map.provinces;
-  const border = mk('path', { class: 'border', stroke: theme.province_border || '#fff', 'stroke-width': 2.4, 'stroke-opacity': 0.85 }, null);
+// Border path, province-area bounds and grid extent of a map (shared by the live map and the static renderer).
+function layoutOf(grid, P) {
   let d = '', maxc = 0, maxr = 0;
   const pb = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
   grid.forEach((row, r) => row.forEach((tok, c) => {
     if (tok === '..') return;
     maxc = Math.max(maxc, c); maxr = Math.max(maxr, r);
-    const { x, y } = centre([c, r]);
-    const poly = mk('polygon', { points: hexPts(x, y), stroke: theme.hex_outline || '#000', 'stroke-width': 0.5, 'stroke-opacity': P[tok] ? 0.22 : 0.08, class: P[tok] ? 'land' : 'terr' }, L.base);
-    if (P[tok]) (polys[tok] = polys[tok] || []).push(poly);
-    else poly.setAttribute('fill', tok === '~~' ? 'url(#sea-pat)' : ((theme.terrain || {})[tok] || {}).fill || '#444');
     if (!P[tok]) return;
+    const { x, y } = centre([c, r]);
     pb.x0 = Math.min(pb.x0, x); pb.y0 = Math.min(pb.y0, y); pb.x1 = Math.max(pb.x1, x); pb.y1 = Math.max(pb.y1, y);
     for (const n of neighbours(c, r)) {
       const o = (grid[n[1]] || [])[n[0]];
@@ -129,7 +124,26 @@ function buildBase(state) {
       d += `M${p1[0].toFixed(1)} ${p1[1].toFixed(1)}L${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
     }
   }));
-  border.setAttribute('d', d); L.base.appendChild(border);
+  const full = { x: 0, y: 0, w: (maxc * 1.5 + 2) * S, h: (maxr + 1.5) * SQ3 * S + S };
+  const m = 2 * S;   // province area + a margin
+  const view = pb.x0 < Infinity ? { x: pb.x0 - m, y: pb.y0 - m, w: pb.x1 - pb.x0 + 2 * m, h: pb.y1 - pb.y0 + 2 * m } : { ...full };
+  return { d, full, view };
+}
+
+function buildBase(state) {
+  buildDefs();
+  clear(L.base); polys = {};
+  const grid = rows = parseGrid(state.map.grid), P = state.map.provinces;
+  const border = mk('path', { class: 'border', stroke: theme.province_border || '#fff', 'stroke-width': 2.4, 'stroke-opacity': 0.85 }, null);
+  grid.forEach((row, r) => row.forEach((tok, c) => {
+    if (tok === '..') return;
+    const { x, y } = centre([c, r]);
+    const poly = mk('polygon', { points: hexPts(x, y), stroke: theme.hex_outline || '#000', 'stroke-width': 0.5, 'stroke-opacity': P[tok] ? 0.22 : 0.08, class: P[tok] ? 'land' : 'terr' }, L.base);
+    if (P[tok]) (polys[tok] = polys[tok] || []).push(poly);
+    else poly.setAttribute('fill', tok === '~~' ? 'url(#sea-pat)' : ((theme.terrain || {})[tok] || {}).fill || '#444');
+  }));
+  const lay = layoutOf(grid, P);
+  border.setAttribute('d', lay.d); L.base.appendChild(border);
   for (const p of Object.values(P)) for (const f of p.ports || []) {   // ports: a small anchor at the field's sea-side edge
     const { x, y } = centre(f), t = txt(L.base, x + S * 0.5, y + S * 0.45, theme.port_icon || '⚓', 'port');
     const ti = mk('title', {}, t); ti.textContent = 'Hafen von ' + p.name;
@@ -141,10 +155,8 @@ function buildBase(state) {
     else t = txt(L.base, x, y - S * 0.3, theme.capital_icon || '*', 'cap');
     const ti = mk('title', {}, t); ti.textContent = p.capital_name;
   }
-  full = { x: 0, y: 0, w: (maxc * 1.5 + 2) * S, h: (maxr + 1.5) * SQ3 * S + S };
-  // start zoomed to the province area (+ a margin), the wheel still zooms out to the full map
-  const m = 2 * S;
-  vb = pb.x0 < Infinity ? { x: pb.x0 - m, y: pb.y0 - m, w: pb.x1 - pb.x0 + 2 * m, h: pb.y1 - pb.y0 + 2 * m } : { ...full };
+  full = lay.full;
+  vb = { ...lay.view };   // start zoomed to the province area (+ a margin), the wheel still zooms out to the full map
   applyVb();
 }
 
@@ -436,4 +448,118 @@ export function showRoute(solid, faint = [], waypoints = [], stop = null, attack
     mk('circle', { cx: c.x, cy: c.y, r: S * 0.62, class: 'route-stop' + (attack ? ' attack' : '') }, L.draft);
     if (!attack) mk('path', { d: `M${c.x + 3} ${c.y + 4}V${c.y - 11}L${c.x + 12} ${c.y - 7}L${c.x + 3} ${c.y - 3}`, class: 'route-flag' }, L.draft);
   }
+}
+
+// ======================= static rendering (statistics map, video frames) =======================
+// boardSvg() returns SVG markup with every style inline (no CSS classes, no external fonts), so it works as innerHTML
+// and as the source of an <img> (the video). Colours come from theme.json; theme.stats may override the fallbacks below.
+const XFONT = "'Palatino Linotype','Book Antiqua',Georgia,serif";
+const xe = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+export const statsTheme = th => ({ heat: '#e0482b', heat_min_opacity: 0.18, heat_max_opacity: 0.9, veil_opacity: 0.5,
+  panel: '#2b1a10', panel_opacity: 0.8, text: '#fbf3dc', ...((th || {}).stats || {}) });
+// Heat colour and opacity for a value between 0 and 1 (also used by the legend).
+export const heatStyle = (th, t) => {
+  const st = statsTheme(th);
+  return { fill: st.heat, opacity: +(st.heat_min_opacity + (st.heat_max_opacity - st.heat_min_opacity) * Math.max(0, Math.min(1, t))).toFixed(3) };
+};
+let geoCache = {};
+// Everything about a map that does not depend on the board: sea and terrain hexes, land hex outlines, borders, ports, capitals.
+function geometry(map, th) {
+  if (geoCache.map === map && geoCache.th === th) return geoCache.geo;
+  const grid = parseGrid(map.grid), P = map.provinces, ink = th.ink || th.hex_outline || '#222', sea = ((th.terrain || {})['~~'] || {}).fill || '#356';
+  const lay = layoutOf(grid, P), pts = {};
+  let seaS = '', terr = '', ports = '', caps = '';
+  const land = [];
+  grid.forEach((row, r) => row.forEach((tok, c) => {
+    if (tok === '..') return;
+    const { x, y } = centre([c, r]), hp = hexPts(x, y);
+    pts[c + ',' + r] = hp;
+    if (P[tok]) land.push([tok, hp]);
+    else if (tok === '~~') seaS += `<polygon points="${hp}" fill="url(#stx-sea)" stroke="${xe(th.hex_outline || '#000')}" stroke-width="0.5" stroke-opacity="0.08"/>`;
+    else terr += `<polygon points="${hp}" fill="${xe(((th.terrain || {})[tok] || {}).fill || '#444')}" stroke="${xe(th.hex_outline || '#000')}" stroke-width="0.5" stroke-opacity="0.08"/>`;
+  }));
+  for (const p of Object.values(P)) {
+    for (const f of p.ports || []) { const { x, y } = centre(f); ports += `<text x="${x + S * 0.5}" y="${y + S * 0.45}" font-size="9" opacity="0.75" text-anchor="middle" style="fill:#1d1008;stroke:none">${xe(th.port_icon || '⚓')}</text>`; }
+    const { x, y } = centre(p.capital);
+    caps += th.capital_icon === 'castle' ? `<use href="#stx-castle" x="${x - 8}" y="${y - S * 0.3 - 10}" width="16" height="16"/>`
+      : `<text x="${x}" y="${y - S * 0.3}" font-size="12" text-anchor="middle" style="fill:#fbf3dc;stroke:none">${xe(th.capital_icon || '*')}</text>`;
+  }
+  const defs = `<defs><pattern id="stx-sea" width="24" height="14" patternUnits="userSpaceOnUse"><rect width="24" height="14" fill="${xe(sea)}"/>`
+    + `<path d="M1 4Q4 1 7 4T13 4T19 4M13 11Q16 8 19 11T25 11M-5 11Q-2 8 1 11T7 11" fill="none" stroke="${xe(th.sea_wave || '#fff')}" stroke-width="0.9" stroke-opacity="0.4" stroke-linecap="round"/></pattern>`
+    + `<symbol id="stx-castle" viewBox="0 0 24 24"><path d="M3 21V9h3V6h2v3h2V6h4v3h2V6h2v3h3v12z M10 21v-5a2 2 0 0 1 4 0v5z" fill="#efe0b4" stroke="${xe(ink)}" stroke-width="1.6" stroke-linejoin="round" fill-rule="evenodd"/>`
+    + `<path d="M12 6V1.5l4 1.5-4 1.5" fill="#8c2a1e" stroke="${xe(ink)}" stroke-width="1" stroke-linejoin="round"/></symbol></defs>`;
+  const geo = { grid, pts, land, seaS, terr, ports, caps, defs, full: lay.full, view: lay.view, border: lay.d };
+  geoCache = { map, th, geo };
+  return geo;
+}
+function shieldSvg(a, x, y, fleet, th) {
+  const label = String(a.divisions), w = Math.max(24, label.length * 9 + 12), l = x - w / 2, r = x + w / 2, t0 = y - 13;
+  const sh = `M${l} ${t0}H${r}V${y + 3}Q${r} ${y + 9} ${x} ${y + 13}Q${l} ${y + 9} ${l} ${y + 3}Z`;
+  const hull = `M${l - 3} ${t0 + 4}H${r + 3}L${r - 3} ${y + 10}H${l + 3}Z`, d = fleet ? hull : sh;
+  return `<path d="${d}" fill="none" stroke="#1d1008" stroke-width="3.4" stroke-linejoin="round"/>`
+    + `<path d="${d}" fill="${fleet ? '#dfe9ef' : '#f4e6c2'}" stroke="${fleet ? '#7fa3b8' : '#d9b25a'}" stroke-width="1.3"/>`
+    + `<rect x="${l}" y="${t0}" width="${w}" height="6" fill="${xe(colorIn(th, a.owner))}" stroke="#1d1008" stroke-width="0.8"/>`
+    + `<text x="${x}" y="${y + 2}" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="central" style="fill:#2b1a10;stroke:none">${xe(label)}</text>`;
+}
+// board = {armies, owners} (a replay snapshot or the end board). opts:
+//   width (px, default 1000), height (px; default follows the map's shape; if set the map is centred in it),
+//   view: 'province' (default, the province area) or 'full'; armies: false hides the unit shields;
+//   heat: {"c,r": value} + heatMax -> heatmap over a veil; titleOf(fieldKey, value) -> tooltip text;
+//   label: {title, sub} panel at the top left; bar: [{color, share, label}] land-share bar at the bottom.
+export function boardSvg(map, th, rules, board, opts = {}) {
+  th = th || {};
+  const geo = geometry(map, th), st = statsTheme(th), owners = board.owners || {};
+  const W = opts.width || 1000;
+  let view = opts.view === 'full' ? geo.full : geo.view, H = opts.height;
+  if (H) {
+    let { x, y, w, h } = view; const aspect = W / H;
+    if (w / h < aspect) { const nw = h * aspect; x -= (nw - w) / 2; w = nw; } else { const nh = w / aspect; y -= (nh - h) / 2; h = nh; }
+    view = { x, y, w, h };
+  } else H = Math.round(W * view.h / view.w);
+  const neutral = th.neutral_color || '#888', bg = th.background || '#000';
+  let out = `<svg xmlns="${NS}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${XFONT}">`
+    + `<rect width="${W}" height="${H}" fill="${xe(bg)}"/>`
+    + `<svg x="0" y="0" width="${W}" height="${H}" viewBox="${view.x} ${view.y} ${view.w} ${view.h}">${geo.defs}${geo.seaS}${geo.terr}`;
+  for (const [tok, hp] of geo.land) out += `<polygon points="${hp}" fill="${xe(owners[tok] ? colorIn(th, owners[tok]) : neutral)}" stroke="${xe(th.hex_outline || '#000')}" stroke-width="0.5" stroke-opacity="0.22"/>`;
+  out += `<path d="${geo.border}" fill="none" stroke="${xe(th.province_border || '#fff')}" stroke-width="2.4" stroke-opacity="0.85" stroke-linecap="round" stroke-linejoin="round"/>${geo.ports}${geo.caps}`;
+  if (opts.heat) {
+    out += `<rect x="${view.x}" y="${view.y}" width="${view.w}" height="${view.h}" fill="${xe(bg)}" fill-opacity="${st.veil_opacity}"/>`;
+    const max = opts.heatMax || Math.max(1, ...Object.values(opts.heat));
+    for (const key in opts.heat) {
+      const v = opts.heat[key], hp = geo.pts[key];
+      if (!hp || !(v > 0)) continue;
+      const h = heatStyle(th, v / max);
+      out += `<polygon points="${hp}" fill="${xe(h.fill)}" fill-opacity="${h.opacity}" stroke="${xe(st.text)}" stroke-width="0.6" stroke-opacity="0.35">${opts.titleOf ? `<title>${xe(opts.titleOf(key, v))}</title>` : ''}</polygon>`;
+    }
+  }
+  if (opts.armies !== false) {
+    const caps = new Set(Object.values(map.provinces).map(p => p.capital.join())), list = Object.values(board.armies || {});
+    const isF = a => ((rules.unit_types || {})[a.unit || rules.land_unit] || {}).terrain === 'sea';
+    for (const a of list) {
+      const c = centre(a.field), fleet = isF(a), mates = list.filter(b => b.field.join() === a.field.join()).length;
+      out += shieldSvg(a, c.x + (mates < 2 ? 0 : fleet ? -S * 0.55 : S * 0.55), c.y + (caps.has(a.field.join()) ? S * 0.35 : 0), fleet, th);
+    }
+  }
+  out += '</svg>';
+  const panel = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${xe(st.panel)}" fill-opacity="${st.panel_opacity}"/>`;
+  if (opts.label) {
+    const sub = opts.label.sub ? String(opts.label.sub) : '', w = Math.max(190, 30 + Math.max(String(opts.label.title).length * 22, sub.length * 11));
+    out += panel(16, 16, w, sub ? 84 : 56) + `<text x="30" y="${sub ? 54 : 52}" font-size="34" font-weight="700" style="fill:${xe(st.text)};stroke:none">${xe(opts.label.title)}</text>`;
+    if (sub) out += `<text x="30" y="84" font-size="18" style="fill:${xe(st.text)};fill-opacity:0.85;stroke:none">${xe(sub)}</text>`;
+  }
+  if (opts.bar && opts.bar.length) {
+    const bw = W - 32, y = H - 46;
+    let x = 16, used = 0;
+    out += panel(10, y - 8, W - 20, 40);
+    for (const seg of opts.bar) {
+      const w = bw * seg.share;
+      if (!(w > 0)) continue;
+      used += seg.share;
+      out += `<rect x="${x.toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="24" fill="${xe(seg.color)}"/>`;
+      if (w > 64) out += `<text x="${(x + w / 2).toFixed(1)}" y="${y + 12}" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="central" style="fill:#fff;stroke:#000;stroke-width:2.5px;paint-order:stroke">${xe(seg.label)}</text>`;
+      x += w;
+    }
+    if (used < 1) out += `<rect x="${x.toFixed(1)}" y="${y}" width="${(bw * (1 - used)).toFixed(1)}" height="24" fill="${xe(neutral)}"/>`;
+  }
+  return out + '</svg>';
 }

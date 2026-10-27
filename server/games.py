@@ -71,6 +71,8 @@ class Game:
         self.rejoin = data.get("rejoin", {})    # request id -> {nation, ts, status, token}
         self.rejoin_fails = []                  # epoch seconds of wrong rejoin codes (not saved)
         self.chat = data.get("chat", [])        # [{id, from, to, text, marks, turn, ts}]
+        self.turn_started = data.get("turn_started")   # epoch seconds when the current turn began (archive timing)
+        self.ready_at = data.get("ready_at", {})       # nation -> seconds from turn start until last set ready
         self.state = engine.GameState.from_dict(data["state"]) if data["state"] else None
 
     # --- players: derived from members -------------------------------
@@ -98,7 +100,8 @@ class Game:
                 "reveal": self.reveal, "orders": self.orders, "ready": self.ready, "version": self.version,
                 "last_turn": self.last_turn, "deadline": self.deadline, "pause": self.pause,
                 "pause_used": self.pause_used, "notices": self.notices, "codes": self.codes, "rejoin": self.rejoin,
-                "chat": self.chat, "state": self.state.to_dict() if self.state else None}
+                "chat": self.chat, "turn_started": self.turn_started, "ready_at": self.ready_at,
+                "state": self.state.to_dict() if self.state else None}
 
 
 class Games:
@@ -358,6 +361,7 @@ class Games:
         game.ready = {n: False for n in game.state.players}
         secs = game.state.rules.get("turn_timer_seconds", 0)
         now = time.time()
+        game.turn_started, game.ready_at = now, {}
         game.deadline = now + secs if secs else None
         if game.pause:   # the new turn's timer starts frozen
             game.pause["at"] = now
@@ -410,16 +414,43 @@ class Games:
             self._save(game)
             return {"ok": True}
 
+    def _archive(self, game, row):
+        """Append a row to the game's archive. A disk problem never stops the game."""
+        try:
+            storage.append_history(game.id, row, self.save_dir)
+        except OSError:
+            pass
+
+    def _gold_of(self, game):
+        return {n: p["gold"] for n, p in game.state.players.items()}
+
+    def _archive_final(self, game):
+        """The end of the game (victory or everybody left): the end board, once (RULES.md 12 Recording)."""
+        st = game.state
+        self._archive(game, {"final": True, "turn": st.turn, "ts": time.time(), "board": snapshot(st),
+                             "gold": self._gold_of(game), "winner": st.winner, "alliances": copy.deepcopy(st.alliances),
+                             "ai": copy.deepcopy(st.ai), "players": dict(game.joined)})
+
     def _resolve(self, game, timed_out=()):
-        turn = game.state.turn
-        before = snapshot(game.state)
-        order = list(game.state.player_order)
-        events = engine.resolve_turn(game.state, game.orders)
+        st = game.state
+        turn = st.turn
+        before = snapshot(st)
+        order = list(st.player_order)
+        row = {"turn": turn, "player_order": order, "before": before, "gold_before": self._gold_of(game),
+               "orders": copy.deepcopy(game.orders), "timeouts": list(timed_out), "started": game.turn_started,
+               "ready_at": {n: game.ready_at.get(n) for n in st.players}}
+        events = engine.resolve_turn(st, game.orders)
         game.last_turn = {"turn": turn, "events": events, "before": before, "player_order": order,
                           "timeouts": list(timed_out)}
+        row.update({"gold_after": self._gold_of(game), "resolved": time.time(),
+                    "events": [{k: v for k, v in e.items() if k != "snap"} for e in events],   # copies: last_turn keeps its snaps
+                    "alliances": copy.deepcopy(st.alliances), "no_attack": copy.deepcopy(st.no_attack),
+                    "ai": copy.deepcopy(st.ai)})
+        self._archive(game, row)
         self._begin_turn(game)
-        if game.state.winner:   # victory: nothing is resolved any more
+        if st.winner:   # victory: nothing is resolved any more
             game.status, game.deadline, game.pause = "finished", None, None
+            self._archive_final(game)
         elif timed_out:
             self._notice(game, "timeout",
                          "Zeit überschritten: " + ", ".join(self._label(game, n) for n in timed_out) + ".")
@@ -511,6 +542,10 @@ class Games:
         with self.lock:
             game, member = self._running(gid, token)
             game.ready[member["nation"]] = bool(ready)
+            if ready and game.turn_started:
+                game.ready_at[member["nation"]] = round(time.time() - game.turn_started, 2)
+            else:
+                game.ready_at.pop(member["nation"], None)
             if all(game.ready.values()):
                 self._resolve(game)
             else:
@@ -538,6 +573,7 @@ class Games:
         if not game.state.players:
             game.status, game.deadline, game.pause = "finished", None, None
             self._notice(game, "end", "Alle Spieler haben das Spiel verlassen.")
+            self._archive_final(game)
             self._save(game)
         elif all(game.ready.values()):
             self._resolve(game)
@@ -648,6 +684,43 @@ class Games:
                 req["status"] = "declined"
             self._save(game)
             return {"ok": True}
+
+    # --- statistics and archive (finished games only) ----------------
+    def _finished(self, gid, token):
+        game = self.get(gid)
+        if token and not game.member(token):
+            raise ApiError(403, "Ungültiger Token.")
+        if game.status != "finished" or not game.state:
+            raise ApiError(400, "Die Statistik gibt es erst am Spielende.")
+        return game
+
+    def history(self, gid, token=None):
+        """The raw archive rows (RULES.md 12 Recording)."""
+        with self.lock:
+            game = self._finished(gid, token)
+            return storage.load_history(game.id, self.save_dir)
+
+    def stats(self, gid, token=None):
+        """compute_stats of the archive plus nation names; cached in saves/{gid}.stats.json by STATS_VERSION,
+        archive length and chat length."""
+        with self.lock:
+            game = self._finished(gid, token)
+            history = storage.load_history(game.id, self.save_dir)
+            key = {"version": engine.STATS_VERSION, "rows": len(history), "chat": len(game.chat)}
+            cached = storage.load_stats_cache(game.id, self.save_dir)
+            if cached and cached.get("key") == key:
+                return cached["result"]
+            st = game.state
+            result = engine.compute_stats(st.map, st.rules, history, game.chat, {"players": dict(game.joined)})
+            result["nations"] = {c: {"name": n["name"], "player": result["players"].get(c)}
+                                 for c, n in st.map["nations"].items()}
+            result["map"] = st.map.get("name") or game.map
+            result["video_seconds_per_turn"] = st.rules.get("video_seconds_per_turn", 1)
+            try:
+                storage.save_stats_cache(game.id, {"key": key, "result": result}, self.save_dir)
+            except OSError:
+                pass
+            return result
 
     # --- chat --------------------------------------------------------
     def _clean_marks(self, game, marks):

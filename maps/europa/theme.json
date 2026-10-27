@@ -33,5 +33,14 @@
    "fill": "#2a5e5c"
   }
  },
- "textures": {}
+ "textures": {},
+ "stats": {
+  "heat": "#e0482b",
+  "heat_min_opacity": 0.18,
+  "heat_max_opacity": 0.9,
+  "veil_opacity": 0.5,
+  "panel": "#2b1a10",
+  "panel_opacity": 0.8,
+  "text": "#fbf3dc"
+ }
 }

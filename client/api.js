@@ -35,5 +35,7 @@ export const api = {
   rejoinAnswer: (id, tok, rid, accept) => call('POST', `${g(id)}/rejoin/${encodeURIComponent(rid)}/answer${t(tok)}`, { accept }),
   saveMap: (name, body) => call('PUT', `/api/maps/${encodeURIComponent(name)}`, body),
   chat: (id, tok, body) => call('POST', `${g(id)}/chat${t(tok)}`, body),
+  stats: (id, tok) => call('GET', `${g(id)}/stats${tok ? t(tok) : ''}`),
+  history: (id, tok) => call('GET', `${g(id)}/history${tok ? t(tok) : ''}`),
   preview: (id, tok, body) => call('POST', `${g(id)}/preview${t(tok)}`, body),
 };

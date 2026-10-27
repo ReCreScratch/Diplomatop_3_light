@@ -49,15 +49,17 @@ diplomatio/
     diplomacy_orders.py   no_attack, invite, accept, leave, offer_sale, buy (registered via orders.py)
     victory.py            land-field shares, gift delay, alliance age, hold counter
     resolve.py            runs the phase pipeline
+    stats.py              end-of-game statistics from the archive rows (pure; registries for event handlers, curves, titles)
   server/
     app.py                HTTP endpoints
     games.py              running games, players, ready state, timer
-    storage.py            save/load JSON
+    storage.py            save/load JSON; turn archive (`{gid}.history.jsonl`) and statistics cache (`{gid}.stats.json`)
     maps.py               editor saving: name check, engine validation, atomic write
   client/
     index.html            start / join / rejoin / lobby screens, game screen (map, order panel, order list)
     lobby.js rejoin.js    lobby (players, nation cards, settings, reveal) and rejoin screen
     session.js            pause, surrender, kick, rejoin requests, notices, idle warning, game menu
+    stats.js stats.css    end-of-game statistics overlay (overview, curves, heatmap, fights) and the video export
     editor.html/js/css    map editor page (/editor)
   maps/europa/            map.json (logic), theme.json (looks), reference + preview images
   tools/map_preview.py    draws a map preview PNG for checking
@@ -244,6 +246,7 @@ settings of the right kind. Connectivity is not checked, because provinces may h
 | 2 | Ships: ports, transports, fleets, tank rule | Sea scenarios from RULES.md section 10 work |
 | 3 | Alliances, province selling, victory display with 10-turn rule | RULES.md section 11 works |
 | 4 | Comfort: lobby map preview, random nation reveal, pause, idle warning, surrender/spectator, kick, rejoin (G62), map editor | RULES.md section 12 works |
+| 5 | Turn archive, end-of-game statistics (curves, totals, heatmaps, titles, JSON download), video export | RULES.md 12 "Recording", "Video", "End-of-game statistics" work |
 
 Milestone 1 build order: engine with tests on a tiny test map → server → client → real map → playtest.
 
@@ -258,5 +261,8 @@ Milestone 1 build order: engine with tests on a tiny test map → server → cli
   victory check with game end, diplomacy UI on the board; 203 tests pass.
 - [x] Milestone 4 built: lobby (nation cards, host settings, random draw with reveal), timer notices and idle warning, pause,
   surrender / spectator with the AI ruleset (`engine/ai.py`, also for unpicked nations), kick, rejoin without the personal link
-  (host confirmation or rejoin code, G62), map editor (`/editor`, `PUT /api/maps/{name}`); 290 tests pass. Not built: end-of-game
-  statistics and video export (RULES.md 9 / 12).
+  (host confirmation or rejoin code, G62), map editor (`/editor`, `PUT /api/maps/{name}`); 290 tests pass.
+- [x] Milestone 5 built: raw data in the engine events, turn archive (`saves/{gid}.history.jsonl`, final row at the game end),
+  `engine/stats.py` (curves, totals, kill and chat matrices, heatmaps, game facts, titles; registries so a new statistic is one function),
+  `GET /stats` and `/history` for finished games (cached), statistics overlay (`client/stats.js`: overview, curves, map heatmap, fights,
+  JSON downloads) and the video export (offscreen SVG frames -> canvas -> MediaRecorder, mp4 where the browser can); 317 tests pass.

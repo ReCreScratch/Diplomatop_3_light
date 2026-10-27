@@ -4,7 +4,7 @@ A side is a list of units of one player on one field, fleets first (tank rule, R
 A formula gets each side as a list of {divisions, value, hp} and returns the losses per unit."""
 import math
 
-from .config import exact, round_by
+from .config import as_number, exact, round_by
 from .events import make_event
 
 FORMULAS = {}
@@ -111,6 +111,13 @@ def preview_fight(state, attackers, defenders, attack_at_sea=None):
     return a_loss, d_loss, (defenders[0]["owner"] if a_dead else attackers[0][0]["owner"])
 
 
+def unit_info(state, unit, value, lost, transport):
+    """Raw record of one unit in a fight (for the archive and statistics): the state before the fight."""
+    return {"army": unit["id"], "owner": unit["owner"], "unit": state.unit_of(unit), "fleet": state.is_fleet(unit),
+            "count": unit["divisions"], "value": as_number(value), "forced_march": bool(unit.get("forced_march")),
+            "transport": transport, "lost": lost}
+
+
 def fight(state, attackers, defenders, field, attack_at_sea, events):
     """Resolve a fight on field, update all units, add the event. attackers: units (all of them fight).
     Returns the winner (see preview_fight)."""
@@ -121,9 +128,21 @@ def fight(state, attackers, defenders, field, attack_at_sea, events):
               a_owner: f"{a_name} siegt", d_owner: f"{d_name} siegt"}[winner]
     text = (f"Kampf bei {state.place_name(field)}: {a_name} verliert {losses_text(state, attackers, a_loss)}, "
             f"{d_name} verliert {losses_text(state, defenders, d_loss)}; {result}.")
+    a_side, d_side = side(state, [(u, u["divisions"]) for u in attackers], attack_at_sea), side(state, [(u, u["divisions"]) for u in defenders])
+    a_units = [unit_info(state, u, s["value"], n, not state.is_fleet(u) and bool(attack_at_sea))
+               for u, s, n in zip(attackers, a_side, a_loss)]
+    d_units = [unit_info(state, u, s["value"], n, not state.is_fleet(u) and state.at_sea(u))
+               for u, s, n in zip(defenders, d_side, d_loss)]
+    ships = lambda infos: sum(i["lost"] for i in infos if i["fleet"])          # noqa: E731
+    divisions = lambda infos: sum(i["lost"] for i in infos if not i["fleet"])  # noqa: E731
     events.append(make_event("fight", a_owner, text, field=list(field), attacker=a_owner, defender=d_owner,
                              attacker_losses=sum(a_loss), defender_losses=sum(d_loss), winner=winner,
-                             losses={u["id"]: n for u, n in zip(attackers + defenders, a_loss + d_loss)}))
+                             losses={u["id"]: n for u, n in zip(attackers + defenders, a_loss + d_loss)},
+                             sea=bool(attack_at_sea or state.terrain_at(field) == "sea"),
+                             attacker_units=a_units, defender_units=d_units,
+                             attacker_damage=as_number(damage(a_side)), defender_damage=as_number(damage(d_side)),
+                             attacker_divisions_lost=divisions(a_units), attacker_ships_lost=ships(a_units),
+                             defender_divisions_lost=divisions(d_units), defender_ships_lost=ships(d_units)))
     for unit, lost in zip(attackers + defenders, a_loss + d_loss):
         unit.pop("route", None)  # a fight ends a standing march (G58)
         state.lose_divisions(unit, lost)
