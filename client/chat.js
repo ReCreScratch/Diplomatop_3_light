@@ -18,7 +18,7 @@ const store = {
 const seenKey = () => 'dipl-chat-seen-' + ctx.gid;
 const seen = () => store.get(seenKey(), {});
 const msgs = () => (ctx.G && ctx.G.chat) || [];
-const others = () => Object.keys(ctx.G.players).filter(p => p !== ctx.G.me);
+const others = () => ctx.G.me ? Object.keys(ctx.G.players).filter(p => p !== ctx.G.me) : [];   // spectators read the public channel only
 const chanOf = m => m.to == null ? 'all' : (m.from === ctx.G.me ? m.to : m.from);
 const inChan = ch => msgs().filter(m => chanOf(m) === ch);
 const draft = () => drafts[cur] || (drafts[cur] = { text: '', marks: [] });
@@ -134,6 +134,7 @@ function notify(m) {
 // ---------- rendering ----------
 function render() {
   const G = ctx.G, chans = ['all', ...others()];
+  el.comp.hidden = !G.me;
   const counts = chans.map(unread), total = counts.reduce((a, b) => a + b, 0);
   el.total.textContent = total; el.total.hidden = !total || !collapsed;
   if (collapsed) return;

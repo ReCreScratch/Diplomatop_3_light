@@ -1,12 +1,13 @@
-# Diplomatio 3.0 – Interface contract (milestone 1)
+# Diplomatio 3.0 – Interface contract (milestones 1–4)
 
 Binding contract between `engine/`, `server/` and `client/`. Rules: [RULES.md](RULES.md). Plan: [IMPLEMENTATION.md](IMPLEMENTATION.md).
 Coordinates are always `[c, r]` lists in JSON. Neighbours (flat-top, odd columns raised half a field):
 odd c → `(c,r-1),(c,r+1),(c-1,r-1),(c-1,r),(c+1,r-1),(c+1,r)`; even c → `(c,r-1),(c,r+1),(c-1,r),(c-1,r+1),(c+1,r),(c+1,r+1)`.
 
 ## 1. Conventions
-- **Player id = nation code** (`"GB"`, `"FR"` …). One player per nation. Nations nobody picked are **neutral**
-  (their provinces get owner `null`).
+- **Player id = nation code** (`"GB"`, `"FR"` …). One player per nation. Nations nobody picked are **AI nations**
+  (milestone 4, see `ai` below) when the server starts a game; `engine.new_game` without `ai=` keeps them **neutral**
+  (provinces with owner `null`), and map provinces with owner `null` are always neutral.
 - Passable for land armies in milestone 1: fields whose token is a province code. `~~`, `##`, `..`, `?XX` are not passable.
 - Gold may have decimals (JSON int when whole, else float; computed exactly). Upkeep is rounded on the nation total
   only if `upkeep_rounding` is not `none` (default `none`).
@@ -16,8 +17,14 @@ odd c → `(c,r-1),(c,r+1),(c-1,r-1),(c-1,r),(c+1,r-1),(c+1,r)`; even c → `(c,
 ```python
 load_map(folder: str | Path) -> dict            # parsed + validated map.json (raises MapError)
 load_rules(map_rules: dict, overrides: dict) -> dict   # rules/default.json <- map "rules" <- lobby overrides
-new_game(map_data, players: dict[str, str], rules: dict, seed: int) -> GameState
-    # players: {nation: player_name}. Runs the start of turn 1 (player order). Income is paid in the gold phase.
+new_game(map_data, players: dict[str, str], rules: dict, seed: int, ai=()) -> GameState
+    # players: {nation: player_name}. ai: nations run by the AI ruleset (RULES.md 8.2; their provinces get the nation
+    # as owner, their start armies are placed). Runs the start of turn 1 (player order). Income is paid in the gold phase.
+    # A nation's `start_gold` in map["nations"] overrides rules["start_gold"].
+make_ai(state, nation, reason: "surrender" | "kick", events: list) -> None
+    # hands a player's nation to the AI ruleset: leaves players / player order / alliance / pacts / invitations / offers,
+    # standing routes end, units and provinces stay. Appends the public event {"kind": reason, ...}.
+validate_map(map_dict)                                          # engine's map check on a dict (raises MapError)
 validate_orders(state, player_id, orders: list[dict]) -> list[list[str]]
     # one list of German error strings per order (empty = valid), checked in entry order against the
     # current state (gold total, recruit limit, ranges, paths, ownership …)
@@ -47,7 +54,8 @@ GameState.to_dict() / GameState.from_dict(d)                    # JSON-safe, rou
   "invitations": [{"from": "GB", "to": "IT", "turn": 7}],
   "offers": [{"province": "GB3", "from": "GB", "to": "FR", "price": 5, "turn": 7}],
   "victory": {"kind": "player", "id": "GB", "players": ["GB"], "turns": 2},
-  "winner": null
+  "winner": null,
+  "ai": {"FR": {"reason": "surrender", "name": "Anna"}}
 }
 ```
 Milestone 3 keys (old saves lack them and still load; `rules` gets the new settings and the diplomacy phase):
@@ -56,6 +64,11 @@ does not attack (hostile only if not mutual, not allied). `invitations` / `offer
 (the turn they were made in) and are dropped at the end of the next resolution. `gifts` also records sales (`price`).
 `victory` = the running candidate (`kind` "player" / "alliance", `turns` = resolutions held in a row) or null;
 `winner` = `{players, alliance, turn}` once the game is won, then `resolve_turn` returns no events.
+Milestone 4 key: `ai` = nation -> {`reason`: "unpicked" / "surrender" / "kick", `name`: former player name or null}. AI
+nations are not in `players` (no gold, no orders, not in the player order) but keep their provinces and units. They never
+move; each recruitment phase (after the players' orders) they recruit `ai_recruit_per_city` divisions in every own city
+(`recruit` events with `"ai": true`). `state.hostile` is true between an AI nation and every other nation. AI nations hold
+land fields but are never victory candidates. Old saves lack `ai` and load with `{}`.
 `state.hostile(a, b)`: false for the same player, allies and mutual `no_attack`; true for `None` (neutral).
 `fresh` = divisions recruited this turn (cannot move unless `recruits_can_move_same_turn`); reset to 0 at turn start.
 `unit` = key of `rules.unit_types` (`division`, `ship`); a unit of ships is a fleet and `divisions` counts its ships.
@@ -116,6 +129,7 @@ Each event: `{"kind": ..., "player": pid|null, "text": "German one-liner", ...ex
 `skipped` (`order`, `reason`). Milestone 3: `no_attack` (`to`, `on`, `mutual`), `alliance` (`alliance`, `members`; founded,
 joined or changed), `leave` (`alliance`), `alliance_end` (`alliance`), `buy` (`province`, `to` = buyer, `seller`, `price`),
 `move_blocked` (`army`, `field`), `victory_progress` (`players`, `turns`, `need`), `victory` (`players`, `alliance`).
+Milestone 4: `surrender` and `kick` (`player` = the nation; only returned by `make_ai`, the server shows them as notices).
 Diplomacy events come first (with snaps); `alliance`/`leave`-removal/`alliance_end`/`victory*` at the end of the
 resolution have no snap. `invite` and `offer_sale` produce no event.
 Income/upkeep events come at the start of the gold phase (after recruitment, before movement); `turn_start` comes last.
@@ -139,15 +153,27 @@ Based on the current board (ignores other orders).
 – `share` = real share of all land fields, `share_counted` = the part that counts for victory (gifts / sales younger than
 `gift_delay_turns` excluded, RULES.md section 11).
 `upkeep` = what the player would pay at the next turn start with the current armies.
+AI nations get a row too, with `"ai": true` and `name` = `"KI"` or `"KI (former player)"` (player rows have no `ai` key).
 
 ## 8. HTTP API (`server/app.py`, FastAPI, JSON). Token = secret per player, passed as `?token=`.
 | Method & path | Body → Response |
 |---|---|
-| `GET /api/maps` | → `["europa", ...]` (folders in `maps/`) |
+| `GET /api/maps` | → `["europa", ...]` (folders in `maps/` with a `map.json`) |
+| `GET /api/rules` | → the default rules (rules/default.json merged; the editor shows them as placeholders) |
+| `PUT /api/maps/{name}` | editor: `{map: {...map.json...}, theme?: {...}, theme_from?: "europa"}` → `{ok, name}`. Name must match `[A-Za-z0-9][A-Za-z0-9_-]{0,39}` (no paths). The map is validated with the engine's `validate_map` (incl. income / names / start gold / `rules` keys) before anything is written; 400 with the German engine message otherwise. Writes `maps/{name}/map.json`; `theme.json` from `theme`, else copied from `theme_from` if the map has none. Overwrites an existing map of that name. |
 | `POST /api/games` | `{map, rules?: {}}` → `{game_id, host_token}` |
-| `GET /api/games/{gid}/lobby?token=` | → `{game_id, map, status: "lobby"/"running"/"finished", nations: {code: name}, joined: {code: player_name}, me: code\|null, is_host: bool, host: code\|null, rules: {merged rules}}` (token optional) |
-| `POST /api/games/{gid}/join` | `{name, nation, host_token?}` → `{token}`. Passing host_token marks this player as host. |
-| `POST /api/games/{gid}/start?token=` | host only, ≥1 player → `{ok: true}` |
+| `GET /api/games/{gid}/lobby?token=` | → `{game_id, map, status: "lobby"/"running"/"finished", nations: {code: name}, joined: {code: player_name}, me: code\|null, me_name: str\|null (null = token unknown), is_host: bool, host: code\|null, players: [{id, name, nation: code\|null, host, you}] (join order), ai: [nation codes run by the AI, once started], nation_mode: "choose"/"random", reveal: null \| {elapsed, pause, entries: [{nation, name}]}, editable: [rule keys the host may set], rules: {merged rules}}` (token optional) |
+| `POST /api/games/{gid}/join` | lobby only: `{name, nation?, host_token?}` → `{token}`. Name ≤ 30 characters, at most as many players as nations. The nation is optional (choose later / random draw). The first joiner passing the game's `host_token` becomes host. |
+| `POST /api/games/{gid}/nation?token=` | lobby: `{nation: code\|null}` picks a free nation (null gives it back); 400 in random mode, if taken or unknown. Clears `reveal`. |
+| `POST /api/games/{gid}/settings?token=` | lobby, host only: `{rules?: {key: number}, nation_mode?: "choose"/"random"}`. Allowed rule keys (`LOBBY_SETTINGS` in server/games.py): `turn_timer_seconds`, `start_gold`, `victory_hold_turns`, `max_alliance_size`, `alliance_min_turns`, `idle_warning_seconds`, `nation_reveal_pause_seconds`; values are non-negative numbers (integers where the rule is one). They go into the game's overrides. |
+| `POST /api/games/{gid}/assign_random?token=` | lobby, host only: hands out all nations at random to all players and stores the reveal `{started, pause = nation_reveal_pause_seconds, order}`; clients show entry i after (i+1) × pause seconds. 400 if more players than nations. Any join / nation change / kick clears the reveal. |
+| `POST /api/games/{gid}/start?token=` | host only, ≥1 player, every player has a nation, reveal over → `{ok: true}`. Nations nobody picked become AI nations. Creates each player's rejoin code. |
+| `POST /api/games/{gid}/pause?token=` | running: `{paused: bool}`. Pause: needs a running timer; the host any time (unlimited), a player once per game (`pause_used`); 400 "Es ist schon pausiert." / "Du hast deine Pause schon benutzt." / "Es läuft kein Zugtimer.". Resume: host only (403 otherwise). While paused the timer is frozen and does not expire; resuming moves the deadline by the paused time; the pause carries over into the next turn. Public notice for both. |
+| `POST /api/games/{gid}/surrender?token=` | running, active players: the nation becomes AI (`make_ai`), the token stays valid as a spectator; orders / ready of the nation are dropped; resolves the turn if all remaining players are ready; the last player leaving finishes the game (no winner). Public notice. |
+| `POST /api/games/{gid}/kick?token=` | host only: `{nation}` (or `{member}` = lobby player id): lobby: the player is removed; running: the token becomes invalid, the nation becomes AI (`reason: "kick"`), requests of that nation are dropped. 400 for the host himself. Public notice. |
+| `POST /api/games/{gid}/rejoin` | no token. `{nation}` → `{request_id}` (a rejoin request for the host; one per nation) or `{nation, code}` → `{token}` (the personal rejoin code gives a new token at once, the old one dies, the code is replaced; 403 "Falscher Code."; after 8 wrong codes per 60 s: 400). 400 if the game is not running or the nation is surrendered / kicked / AI. |
+| `GET /api/games/{gid}/rejoin/{rid}` | the requester polls: `{status: "pending"}`, `{status: "declined"}` or `{status: "approved", token}` (delivered once, then the request is gone / 404). Requests older than 10 minutes are dropped when a new one is made. |
+| `POST /api/games/{gid}/rejoin/{rid}/answer?token=` | host only: `{accept: bool}`. Accept: the nation's token is replaced by a new one (the old one is invalid at once; orders and ready state stay), public notice. |
 | `GET /api/games/{gid}/state?token=&since=N` | → `{changed: false}` if `version == N`, else the view below |
 | `PUT /api/games/{gid}/orders?token=` | `{orders: [...]}` replaces own list → `{errors: [[...], ...]}` |
 | `POST /api/games/{gid}/ready?token=` | `{ready: bool}` → `{ok: true}` |
@@ -162,7 +188,7 @@ State view:
  "map": {...}, "theme": {...theme.json...}, "owners": {...}, "armies": {...},
  "board": [...], "my_orders": [...], "order_errors": [[...]],
  "incoming": [{"type": "send_gold", "from": "FR", "amount": 5}],
- "last_turn": {"turn": 2, "events": [...], "before": {"armies": {...}, "owners": {...}}, "player_order": ["FR", "GB"]},
+ "last_turn": {"turn": 2, "events": [...], "before": {"armies": {...}, "owners": {...}}, "player_order": ["FR", "GB"], "timeouts": ["FR"]},
  "chat": [{"id": 4, "from": "FR", "to": null, "text": "Hallo", "marks": [{"kind": "field", "f": [3, 4]}], "turn": 2, "ts": 1760000000}]}
 ```
 `chat` holds the public messages (`to: null`) plus private ones where the caller is sender or receiver, oldest first
@@ -174,6 +200,15 @@ and bumps `version`.
 in which it was resolved; the client replay starts there
 and applies each group's `snap`. (Saves from before this feature have no `before`; the client then skips the auto-replay.)
 `my_recruit_limit` (= `recruit_limit_per_province` × own provinces at turn start) is also in the view.
+Milestone 4 view fields: `me` is `null` for a **spectator** (surrendered player; `spectator: true`, `my_nation` = the nation he had,
+`my_gold` null, `my_orders` / `order_errors` empty; `PUT orders`, `ready`, `preview`, `surrender` and `chat` answer 400 "Du schaust nur noch zu.").
+`ai` = {nation: {reason, name}}; `members` = {nation: player name} of everybody who joined (also surrendered); `host` flag `is_host`;
+`timer_remaining` is frozen while `pause` = `{by: nation, host: bool, name}` is set (else `null`); `pause_available` = the caller may still
+use his own pause; `last_turn.timeouts` = nations that were not ready when the timer ended; `notices` = public messages
+`[{id, turn, kind: "timeout"/"pause"/"surrender"/"kick"/"rejoin"/"end", text}]` (the last 30; the notice of a timeout carries the
+turn that just started, so clients show it during that turn); `my_rejoin_code` (active players only); `rejoin_requests`
+`[{id, nation, name, ts}]` (host only, else `[]`). A kicked or replaced token gets 403 "Ungültiger Token.".
+Chat: spectators can read (public messages and private ones they took part in) but not write; `to` must be an active player.
 Milestone 3 view fields: `alliances` (all, public), `no_attack` (all, public), `invitations` and `offers` as
 `{"incoming": [...], "outgoing": [...]}` (only the caller's own; offers whose seller lost the province are left out),
 `victory` = `{"leader": {kind, id, players, turns} | null, "need": victory_hold_turns}`, `winner` (null or `{players, alliance, turn}`).
@@ -183,8 +218,10 @@ While `status == "lobby"`, `GET state` returns only `{changed, version, status}`
 Errors: HTTP 400 (bad input), 403 (wrong token / not host), 404 (unknown game), body `{"detail": "German text"}`.
 `fresh` in armies counts only divisions recruited in earlier resolutions of this turn; the client adds pending
 recruit orders itself.
-`version` increases on every change (join, orders, ready, resolution). The client polls every 2 s with `since`.
+`version` increases on every change (join, orders, ready, resolution, pause, notices, rejoin requests). The client polls every 2 s with `since`.
 `incoming` is empty in milestone 1 (other players' orders stay hidden; the client shows *own* sends/gifts in the
 receiver's board row). Static files: `/` → `client/index.html`, `/client/*`, `/maps/*`.
-Saves: `saves/{gid}.json` after every change (state + tokens + orders + ready), loaded on server start.
+Saves: `saves/{gid}.json` after every change (state + members/tokens + orders + ready + pause + notices + codes), loaded on server start.
+Milestone 4 changed the save layout from `tokens` / `joined` / `host` to `members: [{id, token, name, nation, host}]`; saves of the old layout are converted
+on load. Static files: also `/editor` → `client/editor.html`.
 Run: `python -m uvicorn server.app:app --host 0.0.0.0 --port 8000`.

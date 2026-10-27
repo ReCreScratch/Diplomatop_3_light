@@ -160,7 +160,7 @@ def test_diplomacy_view_and_finished_game(tmp_path):
     # GB gets more than 40 % of the land: the game ends after this resolution (victory_hold_turns = 1)
     game = c.app.state.games.games[gid]
     for code, owner in game.state.owners.items():
-        if owner is None or owner == "FR":
+        if owner != "GB":   # unpicked nations are AI-owned since milestone 4
             game.state.owners[code] = "GB"
     game.state.owners[prov] = "GB"
     ready(t1), ready(t2)

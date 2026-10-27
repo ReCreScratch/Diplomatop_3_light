@@ -45,6 +45,7 @@ diplomatio/
     conquest.py
     turn_order.py         turn-order rule interface + default rule
     alliances.py          alliance records: found, join, leave
+    ai.py                 AI ruleset: make_ai (surrender / kick), recruit (called by the recruitment phase)
     diplomacy_orders.py   no_attack, invite, accept, leave, offer_sale, buy (registered via orders.py)
     victory.py            land-field shares, gift delay, alliance age, hold counter
     resolve.py            runs the phase pipeline
@@ -52,8 +53,12 @@ diplomatio/
     app.py                HTTP endpoints
     games.py              running games, players, ready state, timer
     storage.py            save/load JSON
+    maps.py               editor saving: name check, engine validation, atomic write
   client/
-    index.html            map, order panel, order list
+    index.html            start / join / rejoin / lobby screens, game screen (map, order panel, order list)
+    lobby.js rejoin.js    lobby (players, nation cards, settings, reveal) and rejoin screen
+    session.js            pause, surrender, kick, rejoin requests, notices, idle warning, game menu
+    editor.html/js/css    map editor page (/editor)
   maps/europa/            map.json (logic), theme.json (looks), reference + preview images
   tools/map_preview.py    draws a map preview PNG for checking
   rules/default.json      default rules config
@@ -137,9 +142,30 @@ summary, Ready button.
 
 **Board:** for every player provinces, province share, income, upkeep, armies, total divisions (no gold).
 
-**Lobby / start:** map tiles with a mini-map preview; nations as cards (theme colour, name, province count,
-taken ones greyed with player name); live player list with host crown; "Link kopieren" button; host button
-"Spiel starten (N Spieler)"; collapsible short rule summary from the rules config.
+**Lobby / start (milestone 4, `lobby.js`):** map tiles with a mini-map preview (`minimap.js`, reuses the theme); joining needs only a
+name (`app.js`). The lobby shows a live player list with host crown (host: ✕ to remove a player), the nations as cards (theme
+colour, name, province count; taken ones greyed with the player's name; click = choose, click again = give back), the host's
+settings (turn limit as minutes + seconds → `turn_timer_seconds`, start gold, nation mode "jeder wählt selbst" / "zufällig
+verteilen" with the button "Nationen auslosen"), "Link kopieren", a collapsible rule summary and the button "Spiel starten (N
+Spieler)" (disabled until everybody has a nation and the reveal is over). The random draw is stored by the server (`reveal`);
+every client reveals the entries one by one, `pause` seconds apart, with its own clock (polling gets faster during a reveal).
+A running game opened without a (valid) token shows the **rejoin screen** (`rejoin.js`): nations with player names, "Beim
+Spielleiter anfragen" (polls the request) or the personal code field.
+
+**In-game session (`session.js`):** top bar buttons "⏸ Pause" (host: any time; players: "Meine Pause", once) and "☰ Spiel"; a notice
+bar under the top bar shows the pause (host: "Pause beenden"), the spectator note, the public notices of this turn (timeouts,
+surrender, kick, rejoin) and, for the host, rejoin requests with "Zulassen" / "Ablehnen". The game menu shows the personal rejoin
+code, "Aufgeben" (confirm dialog) and, for the host, the player list with "Entfernen" (confirm dialog). The idle warning is purely
+client side: no pointer / key input for `idle_warning_seconds` while not ready → a written prompt and a pulsing Ready button.
+Spectators (`me == null`) get the map, the board and the public chat read-only; kicked / replaced tokens get an overlay.
+
+**Map editor (`/editor`, `editor.js`):** loads any map from `maps/` (static files), draws it as SVG from its theme and offers the
+tools "Auswählen" (pick a province), "Malen" (assign fields of the chosen province, or sea / edge / empty, by dragging),
+"Hauptstadt", "Hafen", plus panels for the province (name, capital name, income, owner), nations (name, colour, start gold,
+add / delete) and the map's rule overrides (victory conditions, AI recruits, start gold). After painting it keeps the map
+consistent (empty provinces vanish, capital and ports stay inside their province). "Speichern als" sends map + theme to
+`PUT /api/maps/{name}`; the server validates with the engine's loader and the map appears in the lobby. "Neue Karte …" starts a
+blank sea map of a chosen size.
 
 **Last turn:** step-by-step replay (◀ ▶) through the resolution in player order, highlighting each move, fight
 and conquest on the map, with a one-line text per step.
@@ -181,11 +207,14 @@ the top-left token. Tokens:
 - `~~` sea, `##` edge of the map (not playable), `..` no field
 - `?SE`, `?RU`, `?TR` – land without provinces yet (Scandinavia, Russia, Ottoman region); blocked for now
 
+**Nations:** `{"name", "start_gold"?}` – `start_gold` overrides the rules' `start_gold` for that nation (set in the editor).
+
 **Provinces:** `{"name", "capital_name", "capital": [c, r], "income", "owner", "ports": [[c, r], ...]}`. A port is a
 field of the province next to the sea (checked by the loader). Europa ports are placeholders (RULES.md M7).
 
 The loader checks: known tokens, every province has fields and its capital inside it, every owner exists,
-start armies stand on province fields. Connectivity is not checked, because provinces may have separate parts
+start armies stand on province fields, names are non-empty, `income` / `start_gold` are numbers >= 0 and `rules` only holds known
+settings of the right kind. Connectivity is not checked, because provinces may have separate parts
 (islands, GB2, ES5). Start armies: `[{"owner", "field", "divisions"}]`.
 
 ### 4.2 Keeping graphics replaceable
@@ -214,7 +243,7 @@ start armies stand on province fields. Connectivity is not checked, because prov
 | 1 | Engine core: map loading, economy, recruit/disband, movement, split/merge, forced march, combat, conquest, turn order, gold/province gifts. Server, client, save/load. Test map + real map. | A full game can be played online by 2+ players on the real map, and all rules in RULES.md sections 1–9 have tests |
 | 2 | Ships: ports, transports, fleets, tank rule | Sea scenarios from RULES.md section 10 work |
 | 3 | Alliances, province selling, victory display with 10-turn rule | RULES.md section 11 works |
-| 4 | Comfort: lobby map preview, random nation reveal, pause, idle warning, surrender/spectator, kick, map editor | as needed |
+| 4 | Comfort: lobby map preview, random nation reveal, pause, idle warning, surrender/spectator, kick, rejoin (G62), map editor | RULES.md section 12 works |
 
 Milestone 1 build order: engine with tests on a tiny test map → server → client → real map → playtest.
 
@@ -227,3 +256,7 @@ Milestone 1 build order: engine with tests on a tiny test map → server → cli
 - [x] Milestone 2 built: ports, ships, armies at sea, linking, sea combat; 160 tests pass.
 - [x] Milestone 3 built: diplomacy phase (do-not-attack, alliances, sale offers), hostility and pass-through,
   victory check with game end, diplomacy UI on the board; 203 tests pass.
+- [x] Milestone 4 built: lobby (nation cards, host settings, random draw with reveal), timer notices and idle warning, pause,
+  surrender / spectator with the AI ruleset (`engine/ai.py`, also for unpicked nations), kick, rejoin without the personal link
+  (host confirmation or rejoin code, G62), map editor (`/editor`, `PUT /api/maps/{name}`); 290 tests pass. Not built: end-of-game
+  statistics and video export (RULES.md 9 / 12).

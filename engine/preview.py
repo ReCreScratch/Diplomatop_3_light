@@ -74,15 +74,18 @@ def board(state):
     (gifted and sold provinces only after gift_delay_turns, RULES.md 11.5)."""
     fields, total = fields_of(state, state.turn - 1)
     rows = []
-    for player, info in state.players.items():
+    names = {**{p: i["name"] for p, i in state.players.items()},
+             **{p: f"KI ({i['name']})" if i["name"] else "KI" for p, i in state.ai.items()}}
+    for player, name in names.items():
         units = [a for a in state.armies.values() if a["owner"] == player]
         armies = [a for a in units if not state.is_fleet(a)]
         real, counted = fields[player]
         alliance = state.alliance_of(player)
-        rows.append({"player": player, "name": info["name"], "provinces": len(state.provinces_of(player)), "fields": real,
+        rows.append({"player": player, "name": name, "provinces": len(state.provinces_of(player)), "fields": real,
                      "share": real / total if total else 0, "share_counted": counted / total if total else 0,
                      "alliance": alliance["id"] if alliance else None, "income": income_of(state, player),
                      "upkeep": upkeep_of(state, player), "armies": len(armies),
                      "divisions": sum(a["divisions"] for a in armies),
-                     "ships": sum(a["divisions"] for a in units if state.is_fleet(a))})
+                     "ships": sum(a["divisions"] for a in units if state.is_fleet(a)),
+                     **({"ai": True} if player in state.ai else {})})   # AI rows are marked
     return rows

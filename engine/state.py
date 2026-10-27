@@ -32,6 +32,7 @@ class GameState:
         self.offers = d.get("offers", [])                # [{province, from, to, price, turn}], same
         self.victory = d.get("victory")                  # running candidate {kind, id, players, turns} or None
         self.winner = d.get("winner")                    # {players, alliance, turn} once the game is won
+        self.ai = d.get("ai", {})                        # nation -> {reason, name}: nations run by the AI ruleset (RULES.md 8.2)
         self.leaving = []                                # members who leave at the end of this resolution (transient)
         self.cells = parse_grid(map["grid"])  # derived, not saved
         self.ports = {tup(f): code for code, p in map["provinces"].items() for f in p.get("ports", [])}
@@ -46,6 +47,7 @@ class GameState:
             "prev_player_order": self.prev_player_order, "gifts": self.gifts,
             "alliances": self.alliances, "next_alliance_id": self.next_alliance_id, "no_attack": self.no_attack,
             "invitations": self.invitations, "offers": self.offers, "victory": self.victory, "winner": self.winner,
+            "ai": self.ai,
         })
 
     @classmethod
@@ -138,10 +140,14 @@ class GameState:
 
     def hostile(self, a, b):
         """Units and cities of a and b are enemies (RULES.md 11.1): not the same player, not allied and not
-        both on 'do not attack'. None (neutral / AI province owner) is hostile to everyone."""
+        both on 'do not attack'. None (neutral) and AI nations (8.2) are hostile to everyone."""
         if a is None or b is None:
             return True
-        if a == b or self.allied(a, b):
+        if a == b:
+            return False
+        if a in self.ai or b in self.ai:
+            return True
+        if self.allied(a, b):
             return False
         return not (b in self.no_attack.get(a, ()) and a in self.no_attack.get(b, ()))
 

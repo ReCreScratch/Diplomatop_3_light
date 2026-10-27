@@ -12,8 +12,8 @@ from .games import ApiError, Games
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def create_app(save_dir=None):
-    games = Games(save_dir)
+def create_app(save_dir=None, maps_dir=None):
+    games = Games(save_dir, maps_dir)
 
     async def ticker():
         while True:
@@ -37,6 +37,14 @@ def create_app(save_dir=None):
     def maps():
         return games.maps()
 
+    @app.get("/api/rules")
+    def default_rules():
+        return games.default_rules()
+
+    @app.put("/api/maps/{name}")
+    def save_map(name: str, body: dict = Body(...)):
+        return games.save_map(name, body.get("map"), body.get("theme"), body.get("theme_from"))
+
     @app.post("/api/games")
     def create(body: dict = Body(...)):
         return games.create(body.get("map"), body.get("rules") or {})
@@ -48,6 +56,18 @@ def create_app(save_dir=None):
     @app.post("/api/games/{gid}/join")
     def join(gid: str, body: dict = Body(...)):
         return games.join(gid, body.get("name"), body.get("nation"), body.get("host_token"))
+
+    @app.post("/api/games/{gid}/nation")
+    def nation(gid: str, token: str = "", body: dict = Body(...)):
+        return games.choose_nation(gid, token, body.get("nation"))
+
+    @app.post("/api/games/{gid}/settings")
+    def settings(gid: str, token: str = "", body: dict = Body(...)):
+        return games.settings(gid, token, body.get("rules"), body.get("nation_mode"))
+
+    @app.post("/api/games/{gid}/assign_random")
+    def assign_random(gid: str, token: str = ""):
+        return games.assign_random(gid, token)
 
     @app.post("/api/games/{gid}/start")
     def start(gid: str, token: str = ""):
@@ -73,12 +93,40 @@ def create_app(save_dir=None):
     def chat(gid: str, token: str = "", body: dict = Body(...)):
         return games.post_chat(gid, token, body.get("to"), body.get("text"), body.get("marks"))
 
+    @app.post("/api/games/{gid}/pause")
+    def pause(gid: str, token: str = "", body: dict = Body(...)):
+        return games.set_pause(gid, token, bool(body.get("paused")))
+
+    @app.post("/api/games/{gid}/surrender")
+    def surrender(gid: str, token: str = ""):
+        return games.surrender(gid, token)
+
+    @app.post("/api/games/{gid}/kick")
+    def kick(gid: str, token: str = "", body: dict = Body(...)):
+        return games.kick(gid, token, body.get("nation"), body.get("member"))
+
+    @app.post("/api/games/{gid}/rejoin")
+    def rejoin(gid: str, body: dict = Body(...)):
+        return games.rejoin_request(gid, body.get("nation"), body.get("code"))
+
+    @app.get("/api/games/{gid}/rejoin/{rid}")
+    def rejoin_status(gid: str, rid: str):
+        return games.rejoin_status(gid, rid)
+
+    @app.post("/api/games/{gid}/rejoin/{rid}/answer")
+    def rejoin_answer(gid: str, rid: str, token: str = "", body: dict = Body(...)):
+        return games.rejoin_answer(gid, token, rid, bool(body.get("accept")))
+
     @app.get("/")
     def index():
         return FileResponse(ROOT / "client" / "index.html")
 
+    @app.get("/editor")
+    def editor():
+        return FileResponse(ROOT / "client" / "editor.html")
+
     app.mount("/client", StaticFiles(directory=ROOT / "client"), name="client")
-    app.mount("/maps", StaticFiles(directory=ROOT / "maps"), name="maps")
+    app.mount("/maps", StaticFiles(directory=games.maps_dir), name="maps")
     return app
 
 

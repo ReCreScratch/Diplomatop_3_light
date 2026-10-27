@@ -1,6 +1,6 @@
 # Diplomatio â€“ Rulebook (prototype)
 
-Status: consolidated rules for the prototype, as of 2026-10-27 (reworked for `Diplomatio 4.0.docx`).
+Status: consolidated rules for the prototype, as of 2026-10-28 (reworked for `Diplomatio 4.0.docx`).
 How the rules are implemented is described in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
 **Sources, in order of priority:**
@@ -180,9 +180,14 @@ Then the next turn starts and a new player order is drawn.
 
 ### 8.1 Players, surrender, kick
 - A player with no provinces stays in the game *[decided, G30]*.
-- A player can **surrender** and keep watching as a spectator. Their nation then follows the AI ruleset; all its
-  units stay where they are *[4.0]*.
-- The host can kick players *[4.0]*.
+- A player can **surrender** (with a confirmation) and keep watching as a spectator *[4.0]*. Their nation then follows
+  the AI ruleset; all its units stay where they are. The UI is read-only for them: no orders, no Ready, no chat, no gold.
+  A surrendered player does not count for "all ready". Their alliance, "do not attack" pacts, open invitations and offers
+  end at once. Everybody sees a public notice *[default]*. If the last active player surrenders, the game ends without
+  a winner *[default]*.
+- The host can **kick** a player (with a confirmation) *[4.0]*. The player's token becomes invalid and the nation follows
+  the AI ruleset like after a surrender; public notice. The host cannot kick himself *[default]*. In the lobby a kicked
+  player is simply removed.
 
 ### 8.2 AI ruleset *[4.0]*
 Applies to nations without a player and to nations of surrendered players. Set in the editor; default:
@@ -190,6 +195,11 @@ Applies to nations without a player and to nations of surrendered players. Set i
 - its divisions never move
 - hostile to all other nations
 - builds no ships
+
+Details *[default]*: the AI recruits for free (no gold, no recruit limit) during the recruitment phase, after the players'
+orders, and joins the army that already stands in the city. It can be attacked and conquered like any nation; its units
+stay where they are. AI nations hold land (they count for the shares) but can never win. Every nation nobody picked when
+the game starts is an AI nation (map provinces with owner `null` stay neutral, section 2).
 
 ## 9. Visibility & interface
 - Everyone sees the whole map: provinces, owners, armies and their sizes.
@@ -310,23 +320,44 @@ Resolution gets a **diplomacy phase** before the recruitment phase: diplomacy â†
   A gift or sale made in resolution g counts from the end of resolution g + `gift_delay_turns` *[default]*. If a
   province is conquered, its gift record is cleared.
 
-## 12. Lobby, editor & technical features (milestone 4+)
-- **Lobby** *[4.0]*: nations are chosen by each player or handed out at random; random nations are revealed one by
-  one with `nation_reveal_pause_seconds` (1) between them. Map preview. Turn time limit in minutes and seconds
-  (`turn_timer_seconds`).
-- **Timer** *[4.0]*: players who let the time run out are named to everybody in the next turn. A player who has made
-  no input for `idle_warning_seconds` (40) and isn't ready gets a written prompt to press Ready.
-- **Pause** *[4.0]*: the host can pause the timer any time. Every player has one pause per game; the host can end it.
-- **Editor** *[4.0]*: load and change maps, incl. provinces' gold values, borders and names, start gold of the
-  nations, victory conditions (max. alliance size, shares, `alliance_min_turns`) and the AI ruleset.
+## 12. Lobby, editor & technical features (milestone 4)
+- **Lobby** *[4.0]*: map tiles with a mini-map preview; nations as cards (colour, name, province count; taken ones greyed
+  with the player's name); live player list with the host's crown; "Link kopieren". Joining needs only a name. Nations
+  are chosen by each player, or the host sets the mode to "zufÃ¤llig" and draws them: the draw is revealed one by one with
+  `nation_reveal_pause_seconds` (1) between the nations (the first after one pause), animated for everybody *[4.0]*.
+  The game cannot start before the reveal is over and everybody has a nation *[default]*. The host sets the settings the
+  lobby offers (turn time limit in minutes and seconds = `turn_timer_seconds`, start gold, and a few more, see
+  `LOBBY_SETTINGS` in `server/games.py`).
+- **Timer** *[4.0]*: players who let the time run out are named to everybody in the next turn (public notice). A player who
+  has made no input for `idle_warning_seconds` (40) and isn't ready gets a written prompt to press Ready (client only).
+- **Pause** *[4.0]*: the timer can be paused. The host can pause any time (as often as he wants, not counted as his own
+  pause); every player has **one** pause per game. **Only the host ends a pause** *[4.0]*, also a player's. Paused time does
+  not count; a pause stays across a turn change (the new turn's timer starts frozen). Everybody sees who paused. Pausing
+  needs a running timer (`turn_timer_seconds` > 0) *[default]*. A pause does not stop the turn from resolving when all
+  active players press Ready *[default]*.
+- **Editor** *[4.0]*: separate page `/editor`: load and change maps, incl. provinces' gold values (income), names and
+  capitals, borders (assigning fields to provinces by painting), ports, the nations' start gold (`start_gold` per
+  nation overrides the rules' `start_gold`), the nations' colours (theme), the victory conditions (max. alliance size,
+  shares, `alliance_min_turns`, hold turns) and the AI ruleset (`ai_recruit_per_city`) as the map's `rules` overrides.
+  New maps can be created from scratch. Saving goes through the server, which validates the map with the engine's
+  map loader before anything is written and refuses names that are not plain folder names; new maps show up in the lobby.
 - **Saving** *[4.0]*: an importable save is written at the end of every turn, so a game can continue after a crash
   (already in milestone 1).
 - **Reconnect** *[decided]*: a player who drops out without surrendering (browser closed, connection lost, device
   changed) can reconnect and re-enter the running game as their nation. Their orders and ready state of the current
-  turn are kept. Milestone 1 already does this in the same browser (token in the link and in browser storage);
-  missing is re-entry without the personal link (G62).
+  turn are kept. In the same browser the token in the link and in browser storage is enough. Without the personal link
+  (**G62, resolved** *[default]*):
+  1. The join screen of a running game lists the nations with their player names. The player picks their nation; this
+     creates a **rejoin request** that the host sees (notice bar) and confirms or declines. On confirm the requester gets
+     a **new token** for the nation and the old token stops working at once.
+  2. Not possible for surrendered or kicked nations (and nations nobody plays).
+  3. If the host himself lost the link, nobody can confirm him. So every player sees a short **personal rejoin code** in the
+     game menu; entering it on the join screen (instead of asking the host) gives a new token at once. The code works once and
+     is then replaced by a new one; after 8 wrong codes in 60 seconds the game refuses further tries for a while. The code is
+     server-generated and not a gameplay number.
 - **Video** *[4.0]*: a screenshot of the map is stored at the end of every turn; at the end of the game they are
-  exported as an mp4 video.
+  exported as an mp4 video. *(not built yet)*
+- **End-of-game statistics** *[4.0]* (section 9): not built yet.
 
 ## 13. Rules config â€“ all settings and their starting values
 
@@ -356,7 +387,7 @@ Resolution gets a **diplomacy phase** before the recruitment phase: diplomacy â†
 | `turn_timer_seconds` | 0 | 0 = wait until all are ready |
 | `animation_pause_seconds` | 0.5 | pause between replay steps |
 | `show_other_players_gold` | false | G51 |
-| `ai_recruit_per_city` | 1 | AI ruleset, section 8.2 |
+| `ai_recruit_per_city` | 1 | AI ruleset, section 8.2: divisions per own city per turn (0 = none) |
 | `ship_cost` / `upkeep_per_ship` | 5 / 0.25 | milestone 2 |
 | `unit_types.ship.combat_value` / `hp` | 4 / 4 | per ship, milestone 2 |
 | `fleet_move_range` / `fleet_linked_move_range` | 3 / 1 | milestone 2 |
@@ -369,8 +400,9 @@ Resolution gets a **diplomacy phase** before the recruitment phase: diplomacy â†
 | `victory_share_alliance` | 0.55 | share of land fields, milestone 3 |
 | `max_alliance_size` | 2 (per map) | milestone 3 |
 | `alliance_min_turns` | 10 | turns since the alliance's last change of members before it can win, milestone 3 |
-| `nation_reveal_pause_seconds` | 1 | milestone 4 |
-| `idle_warning_seconds` | 40 | milestone 4 |
+| `nation_reveal_pause_seconds` | 1 | seconds between revealed nations in a random draw, milestone 4 |
+| `idle_warning_seconds` | 40 | seconds without input before the Ready prompt, milestone 4 |
+| `nations.<code>.start_gold` | â€“ | per nation in `map.json`, overrides `start_gold` (set in the editor), milestone 4 |
 
 ## 14. Open questions
 
@@ -405,7 +437,15 @@ Resolution gets a **diplomacy phase** before the recruitment phase: diplomacy â†
 **Technical:**
 | ID | Question | Default |
 |---|---|---|
-| G62 | How does a player re-enter without their personal link (new device, cleared browser)? | the join screen of a running game lists the nations; picking one asks the host to confirm (or a per-player rejoin code shown in the game) |
+| G62 | How does a player re-enter without their personal link (new device, cleared browser)? | **resolved** *[default]* (section 12): the join screen of a running game lists the nations; picking one asks the host to confirm; as a fallback (e.g. the host lost his link) every player has a personal rejoin code in the game menu |
+
+**Lobby, session, editor (milestone 4):** G62 resolved. New defaults â€“ object if they feel wrong:
+- Unpicked nations are AI nations when the game starts (8.2); the AI recruits for free and can never win.
+- Pause: needs a running timer; host pauses are unlimited; a pause carries over into the next turn; only the host ends it.
+- The reveal of a random draw starts after one pause; the start button waits for it.
+- If everybody has surrendered or left, the game ends without a winner.
+- Spectators (surrendered players) read the public chat but cannot write; they keep private chats they were part of.
+- The map editor can overwrite any map by name (no password); the prototype assumes friendly players.
 
 ---
 

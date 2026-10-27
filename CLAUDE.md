@@ -9,7 +9,7 @@ Lightweight online prototype of Diplomatio, a hex-map diplomacy strategy game fo
 - **Sources:** `docs/` holds the original design documents (German).
 
 ## Run
-- Server + client: `python -m uvicorn server.app:app --host 0.0.0.0 --port 8000`, then open http://localhost:8000
+- Server + client: `python -m uvicorn server.app:app --host 0.0.0.0 --port 8000`, then open http://localhost:8000 (map editor: http://localhost:8000/editor)
 - Tests: `python -m pytest -q`
 
 ## Principles

@@ -26,7 +26,7 @@ def counted(state, code, now):
 def fields_of(state, now):
     """{player: (real fields, counted fields)} and the total of all land fields."""
     sizes = province_fields(state)
-    result = {p: [0, 0] for p in state.players}
+    result = {p: [0, 0] for p in list(state.players) + list(state.ai)}   # AI nations hold land but cannot win
     for code, owner in state.owners.items():
         if owner in result:
             result[owner][0] += sizes.get(code, 0)
@@ -48,7 +48,7 @@ def candidates(state, now):
         if share > exact(rules["victory_share_alliance"]) and now - alliance["since"] >= rules["alliance_min_turns"]:
             found.append((share, "alliance", alliance["id"], list(alliance["members"])))
     for player, (_, own) in fields.items():
-        if Fraction(own, total) > exact(rules["victory_share_single"]):   # also when in an alliance
+        if player in state.players and Fraction(own, total) > exact(rules["victory_share_single"]):   # also when in an alliance
             found.append((Fraction(own, total), "player", player, [player]))
     return sorted(found, key=lambda c: -c[0])   # stable: an alliance comes before its own member on equal share
 

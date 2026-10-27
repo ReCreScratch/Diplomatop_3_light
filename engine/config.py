@@ -97,6 +97,8 @@ def validate_map(data):
         check_ports(code, prov, cells)
     for army in data.get("start_armies", []):
         check_start_army(army, cells, data)
+    check_values(data)
+    check_rules(data.get("rules") or {})
 
 
 def check_province(code, prov, fields, nations):
@@ -125,3 +127,36 @@ def check_start_army(army, cells, data):
     token = cells.get(tup(army["field"]))
     if token not in data["provinces"]:
         raise MapError("Startarmee steht nicht auf einem Provinzfeld")
+
+
+def is_number(value):
+    """int or float, but not bool."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def check_values(data):
+    """Names, income values and nation start gold (editor input) must be sane."""
+    for code, nation in data["nations"].items():
+        if not isinstance(nation.get("name"), str) or not nation["name"].strip():
+            raise MapError(f"Nation {code} hat keinen Namen")
+        if "start_gold" in nation and not (is_number(nation["start_gold"]) and nation["start_gold"] >= 0):
+            raise MapError(f"Startgold von {code} ungültig")
+    for code, prov in data["provinces"].items():
+        if not isinstance(prov.get("name"), str) or not prov["name"].strip():
+            raise MapError(f"Provinz {code} hat keinen Namen")
+        if not (is_number(prov.get("income")) and prov["income"] >= 0):
+            raise MapError(f"Einkommen von {code} ungültig")
+
+
+def check_rules(rules):
+    """Rule overrides of a map: only known settings, with a value of the same kind as the default."""
+    if not isinstance(rules, dict):
+        raise MapError("Regeln müssen ein Objekt sein")
+    base = json.loads(RULES_FILE.read_text(encoding="utf-8"))
+    for key, value in rules.items():
+        if key not in base:
+            raise MapError(f"Unbekannte Regel: {key}")
+        default = base[key]
+        ok = (is_number(value) if is_number(default) else isinstance(value, type(default)))
+        if not ok or (is_number(value) and value < 0):
+            raise MapError(f"Regel {key} hat einen ungültigen Wert")

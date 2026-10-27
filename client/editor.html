@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diplomatio – Karteneditor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/client/style.css">
+<link rel="stylesheet" href="/client/editor.css">
+</head>
+<body>
+<header id="ed-top">
+  <b>Karteneditor</b>
+  <label>Karte laden <select id="ed-load"></select></label>
+  <button id="ed-new" type="button">Neue Karte …</button>
+  <span class="sp"></span>
+  <label>Anzeigename <input id="ed-title" maxlength="40"></label>
+  <label>Speichern als <input id="ed-name" maxlength="40" list="ed-names" placeholder="ordnername" autocomplete="off"></label>
+  <datalist id="ed-names"></datalist>
+  <button id="ed-save" class="primary" type="button">Speichern</button>
+  <a href="/">Zur Startseite</a>
+</header>
+<p id="ed-msg" class="msg"></p>
+<div id="ed-newform" hidden>
+  Neue Karte: Breite <input id="ed-w" type="number" min="3" max="120" value="20"> Höhe <input id="ed-h" type="number" min="3" max="80" value="12">
+  <button id="ed-new-go" type="button">Anlegen</button> <button id="ed-new-cancel" type="button">Abbrechen</button>
+</div>
+<main id="ed-body">
+  <aside id="ed-tools">
+    <h4>Werkzeug</h4>
+    <div class="tools" id="ed-toolbtns">
+      <button data-tool="select" class="on" title="Feld anklicken: Provinz auswählen">Auswählen</button>
+      <button data-tool="paint" title="Felder der gewählten Provinz zuweisen oder Meer/Rand/Leer malen (ziehen)">Malen</button>
+      <button data-tool="capital" title="Hauptstadt der gewählten Provinz setzen">Hauptstadt</button>
+      <button data-tool="port" title="Hafen der gewählten Provinz setzen/entfernen (Küstenfeld)">Hafen</button>
+    </div>
+    <div id="ed-brush">
+      <label><input type="radio" name="brush" value="prov" checked> gewählte Provinz</label>
+      <label><input type="radio" name="brush" value="~~"> Meer</label>
+      <label><input type="radio" name="brush" value="##"> Rand (nicht spielbar)</label>
+      <label><input type="radio" name="brush" value=".."> kein Feld</label>
+    </div>
+    <h4>Provinz</h4>
+    <select id="ed-prov" size="1"></select>
+    <div id="ed-provform"></div>
+    <div class="row"><select id="ed-newowner"></select> <button id="ed-newprov" type="button">Neue Provinz</button></div>
+    <h4>Ansicht</h4>
+    <div class="row"><button id="ed-zoom-out" type="button">−</button><button id="ed-zoom-in" type="button">+</button></div>
+    <p class="hint" id="ed-hover">&nbsp;</p>
+  </aside>
+  <div id="ed-mapwrap"><svg id="ed-map" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <aside id="ed-side">
+    <h4>Nationen</h4>
+    <div id="ed-nations"></div>
+    <div class="row"><input id="ed-ncode" maxlength="3" placeholder="Kürzel" size="5"> <input id="ed-nname" maxlength="30" placeholder="Name" size="14"> <button id="ed-nadd" type="button">Hinzufügen</button></div>
+    <h4>Regeln dieser Karte</h4>
+    <p class="hint">Leer lassen = Standardwert. Siegbedingungen und KI-Regeln gelten für jedes Spiel auf dieser Karte.</p>
+    <div id="ed-rules"></div>
+  </aside>
+</main>
+<script type="module" src="/client/editor.js"></script>
+</body>
+</html>

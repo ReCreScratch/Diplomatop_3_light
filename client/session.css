@@ -1,0 +1,22 @@
+/* Session extras: notice bar, game menu, idle warning, pause (client/session.js). Theme variables from style.css only. */
+#noticebar{display:flex;flex-direction:column;gap:3px;padding:5px 14px;background:var(--panel);background-image:var(--grain);border-bottom:2px solid var(--accent);color:var(--ink);font-size:15px}
+#noticebar .nb button{font-size:.8em;padding:1px 8px;margin-left:4px}
+#noticebar .nb.pause{font-weight:700;color:var(--seal2)}
+#noticebar .nb.spec{font-style:italic;color:var(--dim)}
+#noticebar .nb.ask{color:var(--arrow);font-weight:700}
+#idlewarn{padding:6px 14px;background:var(--seal2);color:#fbeed0;text-align:center;font-family:var(--font-head);animation:nudge 1.4s ease-in-out infinite}
+@keyframes nudge{50%{background:var(--seal)}}
+#btn-ready.nudge{animation:readypulse 1s ease-in-out infinite}
+@keyframes readypulse{50%{box-shadow:0 0 0 4px var(--gold),0 1px 3px #000a}}
+#btn-pause,#btn-menu{font-size:.8em}
+#gamemenu{position:absolute;right:12px;top:48px;z-index:20;width:min(380px,calc(100vw - 24px));max-height:70vh;overflow:auto;background:var(--panel);background-image:var(--grain);
+color:var(--ink);border:2px solid var(--accent);border-radius:5px;box-shadow:0 0 0 1px #4d3016,0 6px 20px #000c;padding:4px 12px}
+#gamemenu section{padding:8px 0;border-bottom:1px solid var(--line)}#gamemenu section:last-child{border-bottom:0}
+#gamemenu h4{margin:0 0 4px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--seal)}
+#gamemenu p{margin:2px 0}#gamemenu .hint{font-size:14px;color:var(--dim);font-style:italic}
+#gamemenu ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+#gamemenu .code{font-size:22px;letter-spacing:.2em;background:#f7eed3;border:1px dashed var(--line);padding:0 8px;user-select:all}
+button.danger{border-color:#40100b;color:var(--bad)}
+#gone{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#120a05d9}
+#gone>div{max-width:420px;padding:22px 26px;background:var(--panel);background-image:var(--grain);border:3px solid var(--gold);border-radius:5px;color:var(--ink);text-align:center}
+#gone h2{margin:0 0 8px}

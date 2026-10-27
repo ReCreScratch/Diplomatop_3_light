@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="/client/lobby.css">
 <link rel="stylesheet" href="/client/chat.css">
 <link rel="stylesheet" href="/client/replay.css">
+<link rel="stylesheet" href="/client/session.css">
 </head>
 <body>
 <div id="toast" hidden></div>
@@ -21,17 +22,28 @@
   <div id="st-maps" class="map-tiles"></div>
   <button id="st-create" class="primary big">Spiel erstellen</button>
   <p id="st-msg" class="msg"></p>
+  <p class="msg"><a href="/editor">Karteneditor öffnen</a></p>
 </section>
 
 <section id="screen-join" class="screen lobby-screen" hidden>
   <h1>Spiel beitreten</h1>
   <label class="field">Dein Name <input id="jn-name" maxlength="30" placeholder="Name eingeben" autocomplete="nickname"></label>
-  <div class="split">
-    <div id="jn-nations" class="nation-grid"></div>
-    <div id="jn-mini" class="mini"></div>
-  </div>
+  <div id="jn-mini" class="mini"></div>
+  <p class="msg">Deine Nation wählst du gleich in der Lobby – oder der Spielleiter lost sie aus.</p>
   <button id="jn-go" class="primary big">Beitreten</button>
   <p id="jn-msg" class="msg"></p>
+</section>
+
+<section id="screen-rejoin" class="screen lobby-screen" hidden>
+  <h1>Wieder beitreten <small id="rj-sub"></small></h1>
+  <p class="lead" id="rj-lead">Das Spiel läuft schon. Wähle deine Nation – der Spielleiter bestätigt dich.</p>
+  <div id="rj-nations" class="nation-grid"></div>
+  <button id="rj-ask" class="primary big" disabled>Beim Spielleiter anfragen</button>
+  <div class="linkrow">
+    <input id="rj-code" maxlength="12" placeholder="Oder: persönlicher Code" aria-label="Persönlicher Code" autocomplete="off">
+    <button id="rj-code-go" disabled>Mit Code beitreten</button>
+  </div>
+  <p id="rj-msg" class="msg"></p>
 </section>
 
 <section id="screen-lobby" class="screen lobby-screen" hidden>
@@ -40,6 +52,19 @@
     <ul id="lb-list" class="players"></ul>
     <div id="lb-mini" class="mini"></div>
   </div>
+  <h3 class="sub">Nationen</h3>
+  <div id="lb-nations" class="nation-grid"></div>
+  <p id="lb-reveal" class="reveal" hidden></p>
+  <fieldset id="lb-settings" class="settings">
+    <legend>Einstellungen <small id="lb-host-note"></small></legend>
+    <label>Zeitlimit pro Runde
+      <span class="inl"><input id="lb-min" type="number" min="0" max="999"> min <input id="lb-sec" type="number" min="0" max="59"> s</span>
+      <small>0 min 0 s = kein Limit</small></label>
+    <label>Startgold <input id="lb-gold" type="number" min="0"></label>
+    <label>Nationen
+      <select id="lb-mode"><option value="choose">jeder wählt selbst</option><option value="random">zufällig verteilen</option></select></label>
+    <button id="lb-draw" type="button">Nationen auslosen</button>
+  </fieldset>
   <div class="linkrow">
     <input id="lb-link" readonly aria-label="Einladungslink">
     <button id="lb-copy">Link kopieren</button>
@@ -59,9 +84,14 @@
     <span id="tb-sum"></span>
     <span id="tb-victory"></span>
     <button id="btn-ready" class="primary">Bereit</button>
+    <button id="btn-pause" title="Rundentimer anhalten">⏸ Pause</button>
+    <button id="btn-menu" aria-haspopup="true" aria-expanded="false">☰ Spiel</button>
     <span id="tb-idle" class="msg"></span>
     <span id="conn" class="msg"></span>
   </header>
+  <div id="gamemenu" hidden></div>
+  <div id="noticebar" hidden></div>
+  <div id="idlewarn" hidden></div>
   <main id="gamebody">
     <div id="mapwrap">
       <div id="mapbox">

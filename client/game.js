@@ -5,15 +5,17 @@ import * as O from './orders.js';
 import * as In from './input.js';
 import * as Chat from './chat.js';
 import * as Replay from './replay.js';
+import * as Session from './session.js';
 import { api } from './api.js';
 import { $, esc, ctx, setState, P, nName, pName, ownArmyAt, fieldName, allianceOf, noAttackOn } from './ctx.js';
 
-let version = null, fetchedAt = 0, sendTo = null;
+let version = null, fetchedAt = 0, sendTo = null, stopped = false;
 
 export function startGame(gid, token) {
   ctx.gid = gid; ctx.token = token;
   O.init({ onChange: refresh, toast });
   Chat.init({ toast, poll: () => poll(true) });
+  Session.init({ toast, poll: () => poll(true) });
   In.init({ toast, onEscape: () => { if (Replay.active()) Replay.skip(); } });
   Replay.init({ onEnd: () => { R.drawMap(ctx.G); In.clearPreviews(); refresh(); } });
   $('btn-ready').onclick = toggleReady;
@@ -24,8 +26,8 @@ export function startGame(gid, token) {
   $('olist').onmouseover = e => { const li = e.target.closest('[data-i]'); R.focusOrder(li ? +li.dataset.i : null); };
   $('olist').onmouseleave = () => R.focusOrder(null);
   $('replay').onclick = onReplayClick;
-  setInterval(tickTimer, 1000);
-  (function loop() { poll().finally(() => setTimeout(loop, 2000)); })();
+  setInterval(() => { tickTimer(); Session.tick(); }, 1000);
+  (function loop() { if (!stopped) poll().finally(() => setTimeout(loop, 2000)); })();
 }
 
 async function poll(force) {
@@ -33,7 +35,16 @@ async function poll(force) {
     const v = await api.state(ctx.gid, ctx.token, force ? null : version);
     $('conn').textContent = ''; $('conn').className = 'msg';
     if (v.changed !== false) apply(v);
-  } catch (e) { $('conn').textContent = 'Verbindung: ' + e.message; $('conn').className = 'msg err'; }
+  } catch (e) {
+    if (e.message === 'Ungültiger Token.') { gone(); return; }
+    $('conn').textContent = 'Verbindung: ' + e.message; $('conn').className = 'msg err';
+  }
+}
+// The token was replaced (rejoin elsewhere) or the host removed this player: stop polling and say so.
+function gone() {
+  stopped = true;
+  document.body.insertAdjacentHTML('beforeend', '<div id="gone"><div><h2>Zugang beendet</h2><p>Dein Zugang gilt nicht mehr – du wurdest vom Spielleiter entfernt, oder du bist auf einem anderen Gerät wieder beigetreten.</p>' +
+    `<a href="?game=${encodeURIComponent(ctx.gid)}">Zur Startseite des Spiels</a></div></div>`);
 }
 
 function apply(v) {
@@ -44,6 +55,7 @@ function apply(v) {
   if (!Replay.active()) { R.drawMap(v); In.clearPreviews(); }  // a running replay owns the map; onEnd redraws it
   refresh();
   Chat.update();
+  Session.update();
   Replay.maybeAuto(v);
   renderReplay();
 }
@@ -74,14 +86,14 @@ function renderTop() {
   $('tb-turn').textContent = 'Runde ' + G.turn;
   $('tb-order').innerHTML = G.player_order.map(p =>
     `<span class="chip${p === G.me ? ' me' : ''}${G.ready[p] ? ' rdy' : ''}" style="border-color:${R.colorOf(p)}" title="${esc(nName(p))}">${G.ready[p] ? '✓ ' : ''}${esc(pName(p))}</span>`).join('');
-  $('tb-gold').innerHTML = `Gold <b>${G.my_gold}</b> → <b class="${b.gold < 0 ? 'bad' : ''}">${b.gold}</b>`;
-  $('tb-rec').innerHTML = `Rekruten <b>${b.recruits}/${b.limit}</b>`;
+  $('tb-gold').innerHTML = G.me ? `Gold <b>${G.my_gold}</b> → <b class="${b.gold < 0 ? 'bad' : ''}">${b.gold}</b>` : '';
+  $('tb-rec').innerHTML = G.me ? `Rekruten <b>${b.recruits}/${b.limit}</b>` : '';
   const c = t => L.filter(o => o.type === t).length;
   const parts = [[c('move'), 'Zug', 'Züge'], [c('recruit'), 'Rekrutierung', 'Rekrutierungen'], [c('disband'), 'Abrüstung', 'Abrüstungen'],
     [c('forced_march'), 'Gewaltmarsch', 'Gewaltmärsche'], [c('halt'), 'Halt', 'Halts'], [c('send_gold') + c('give_province') + c('buy'), 'Überweisung', 'Überweisungen'],
     [c('no_attack') + c('invite') + c('accept') + c('leave') + c('offer_sale'), 'Diplomatiebefehl', 'Diplomatiebefehle']]
     .filter(p => p[0]).map(p => `${p[0]} ${p[0] === 1 ? p[1] : p[2]}`);
-  $('tb-sum').textContent = parts.length ? parts.join(', ') : 'keine Befehle';
+  $('tb-sum').textContent = !G.me ? '' : parts.length ? parts.join(', ') : 'keine Befehle';
   const rd = G.ready && G.ready[G.me], btn = $('btn-ready');
   btn.textContent = rd ? 'Bereit ✓ (zurücknehmen)' : 'Bereit'; btn.hidden = !G.me || !!G.winner;
   renderVictory();
@@ -98,15 +110,16 @@ function renderVictory() {
     + `(Bündnis mindestens ${r.alliance_min_turns} Runden alt), ${r.victory_hold_turns} Runden in Folge gehalten.`;
   el.className = lead ? 'lead' : '';
   el.innerHTML = G.winner ? '' : lead ? `Siegbedingung: <b>${esc(who(lead.players))}</b> ${lead.turns}/${V.need}` : '';
-  win.hidden = !G.winner;
+  win.hidden = !G.winner && G.status !== 'finished';
+  if (!G.winner && G.status === 'finished') win.innerHTML = 'Spiel beendet – alle Spieler haben das Spiel verlassen.';
   if (G.winner) win.innerHTML = `Spiel beendet – <b>${esc(who(G.winner.players))}</b> ${G.winner.players.length > 1 ? 'gewinnen' : 'gewinnt'} in Runde ${G.winner.turn}${G.winner.alliance ? ' (Bündnis)' : ''}.`;
 }
 function tickTimer() {
   const G = ctx.G;
   if (!G) return;
   if (G.timer_remaining == null) { $('tb-timer').textContent = ''; return; }
-  const s = Math.max(0, Math.round(G.timer_remaining - (Date.now() - fetchedAt) / 1000));
-  $('tb-timer').textContent = '⏱ ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  const s = G.pause ? G.timer_remaining : Math.max(0, Math.round(G.timer_remaining - (Date.now() - fetchedAt) / 1000));   // frozen during a pause
+  $('tb-timer').textContent = (G.pause ? '⏸ ' : '⏱ ') + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
 // ---------- order list (reaches markers hidden under others) ----------
@@ -138,9 +151,9 @@ function renderBoard() {
       : `<span class="sendform">Gold senden: <input id="b-amt" type="number" min="1" max="${maxSend}" value="1"> <button data-send="1">OK</button> <small>max. ${maxSend}</small></span>`;
     const al = r.alliance && G.alliances && G.alliances[r.alliance];
     const badge = al ? ` <span class="ally" title="Bündnis: ${esc(al.members.map(nName).join(' + '))}">Bündnis ${esc(r.alliance.replace(/^\D+/, ''))}</span>` : '';
-    h += `<tr data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}"><td><span class="sw" style="background:${R.colorOf(r.player)}"></span><b>${esc(r.name)}</b> <small>${esc(nName(r.player))}</small>${badge}${r.player !== G.me ? ` <button class="gold-btn" data-gold="${r.player}" title="Gold senden">Gold</button>` : ''}${pend}${form}</td>` +
+    h += `<tr data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}"><td><span class="sw" style="background:${R.colorOf(r.player)}"></span><b>${esc(r.name)}</b> <small>${esc(nName(r.player))}</small>${badge}${G.me && r.player !== G.me && !r.ai ? ` <button class="gold-btn" data-gold="${r.player}" title="Gold senden">Gold</button>` : ''}${pend}${form}</td>` +
       `<td>${r.provinces}</td><td>${pct(r.share_counted ?? r.share)} <small>(${pct(r.share)})</small></td><td>${r.income}</td><td>${r.upkeep}</td><td>${r.armies}</td><td>${r.divisions}</td><td>${r.ships || 0}</td></tr>`;
-    if (G.me && r.player !== G.me && !G.winner) h += dipRow(r.player);
+    if (G.me && r.player !== G.me && !G.winner && !r.ai) h += dipRow(r.player);
   }
   $('board').innerHTML = h;
   const nw = $('b-amt');
