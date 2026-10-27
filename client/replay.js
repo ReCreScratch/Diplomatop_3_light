@@ -178,22 +178,22 @@ async function playGroup(g, board) {
         if (whole) tok = R.tokenEl(e.army);
         else {
           const src = Object.values(A).find(a => a.owner === e.player && sameF(a.field, e.from));
-          A[e.army] = { ...(src || { owner: e.player, forced_march: false }), id: e.army, field: [...e.from], divisions: e.count, fresh: 0 };
+          A[e.army] = { ...(src || { owner: e.player, forced_march: false }), id: e.army, field: [...e.from], divisions: e.count, fresh: 0, linked: undefined };
           if (src) { src.divisions -= e.count; src.fresh = Math.min(src.fresh || 0, src.divisions); redraw(src.id); }
           tok = R.putToken(A[e.army]);
         }
-        await R.animateToken(tok, fields, dur(reduced() ? 1 : MS_HEX));
+        const mate = e.with && A[e.with];   // a linked fleet / army sails along
+        await Promise.all([R.animateToken(tok, fields, dur(reduced() ? 1 : MS_HEX)),
+          mate ? R.animateToken(R.tokenEl(e.with), fields, dur(reduced() ? 1 : MS_HEX)) : null]);
         A[e.army].field = [...e.to];
+        if (mate) mate.field = [...e.to];
         await ms(150);
         break;
       }
       case 'fight': {
         await panFor([e.field]);
-        const atk = Object.values(A).find(a => a.owner === e.attacker && sameF(a.field, e.field) && R.tokenEl(a.id));
-        const def = Object.values(A).find(a => a.owner === e.defender && sameF(a.field, e.field) && a !== atk);
         await R.effect(e.field, 'fight', ['−' + e.attacker_losses, '−' + e.defender_losses], dur(1100));
-        if (atk) { atk.divisions -= e.attacker_losses; redraw(atk.id); }
-        if (def) { def.divisions -= e.defender_losses; redraw(def.id); }
+        for (const [id, n] of Object.entries(e.losses || {})) if (A[id]) { A[id].divisions -= n; redraw(id); }   // per unit (tank rule)
         await ms(250);
         break;
       }
@@ -224,10 +224,11 @@ async function playGroup(g, board) {
         await R.effect(e.field, 'merge', '', dur(600));
         break;
       }
-      case 'recruit': {
+      case 'recruit': case 'build_ship': {
         await panFor([e.field]);
         if (A[e.army]) { A[e.army].divisions += e.count; A[e.army].fresh = (A[e.army].fresh || 0) + e.count; }
-        else A[e.army] = { id: e.army, owner: e.player, field: [...e.field], divisions: e.count, fresh: e.count, forced_march: false };
+        else A[e.army] = { id: e.army, owner: e.player, field: [...e.field], divisions: e.count, fresh: e.count, forced_march: false,
+          unit: e.kind === 'build_ship' ? ctx.G.rules.sea_unit : ctx.G.rules.land_unit };
         redraw(e.army);
         await R.effect(e.field, 'recruit', '+' + e.count, dur(900));
         break;

@@ -1,7 +1,7 @@
 """Read-only views: preview_move and the public board."""
 from .combat import preview_fight
 from .conquest import can_pay, conquest_cost, conquest_target
-from .orders import Move, Pending, plural, range_of
+from .orders import Move, Pending, moves_as_group, plural, this_turn
 from .phases.gold import income_of, upkeep_of
 
 
@@ -12,12 +12,12 @@ def empty_preview(errors):
 
 
 def first_enemy(state, player, path):
-    """(index of the first step with an enemy army, that army) or (None, None)."""
+    """(index of the first step with enemy units, those units) or (None, [])."""
     for index, step in enumerate(path):
-        enemy = state.enemy_army_at(step, player)
-        if enemy:
-            return index, enemy
-    return None, None
+        enemies = state.enemy_units_at(step, player)
+        if enemies:
+            return index, enemies
+    return None, []
 
 
 def preview_move(state, player, army_id, count, path, forced_march=None):
@@ -33,19 +33,26 @@ def preview_move(state, player, army_id, count, path, forced_march=None):
     army = state.armies[army_id]
     if forced_march is not None:
         army = {**army, "forced_march": bool(forced_march)}
-    count = min(count, state.movable(army))
-    path = path[:range_of(state, army)]   # only this turn's part (standing marches, G58)
-    index, enemy = first_enemy(state, player, path)
-    end = path[index] if enemy else path[-1]
+    partner = state.partner(army)
+    group = moves_as_group(state, army, path, partner)
+    count = army["divisions"] if group else min(count, state.movable(army))
+    path = path[:this_turn(state, army, path, group=group)]   # only this turn's part (standing marches, G58)
+    index, enemies = first_enemy(state, player, path)
+    end = path[index] if enemies else path[-1]
     survivors, fight, texts = count, None, []
-    if enemy:
-        a_loss, d_loss, winner = preview_fight(state, count, army, enemy)
-        survivors = count - a_loss if winner == player else 0
-        fight = {"defender": enemy["owner"], "attacker_losses": a_loss, "defender_losses": d_loss, "winner": winner}
-        texts.append(f"Kampf gegen {state.nation_name(enemy['owner'])}: du verlierst {a_loss}, "
-                     f"sie verlieren {d_loss}.")
+    if enemies:
+        attackers = [(army, count)] + ([(partner, partner["divisions"])] if group else [])
+        attackers.sort(key=lambda pair: not state.is_fleet(pair[0]))
+        at_sea = state.at_sea(army) or state.terrain_at(end) == "sea"
+        a_loss, d_loss, winner = preview_fight(state, attackers, enemies, at_sea)
+        mine = [i for i, (unit, _) in enumerate(attackers) if unit is army][0]
+        survivors = count - a_loss[mine] if winner == player else 0
+        fight = {"defender": enemies[0]["owner"], "attacker_losses": sum(a_loss), "defender_losses": sum(d_loss),
+                 "winner": winner}
+        texts.append(f"Kampf gegen {state.nation_name(enemies[0]['owner'])}: du verlierst {sum(a_loss)}, "
+                     f"sie verlieren {sum(d_loss)}.")
     conquest = None
-    code = conquest_target(state, end, player)
+    code = None if state.is_fleet(army) else conquest_target(state, end, player)
     if code and survivors > 0:
         cost = conquest_cost(state, code)
         conquest = {"province": code, "cost": cost, "possible": can_pay(state, survivors, cost)}
@@ -64,11 +71,13 @@ def board(state):
     total = sum(sizes.values())
     rows = []
     for player, info in state.players.items():
-        armies = [a for a in state.armies.values() if a["owner"] == player]
+        units = [a for a in state.armies.values() if a["owner"] == player]
+        armies = [a for a in units if not state.is_fleet(a)]
         codes = state.provinces_of(player)
         fields = sum(sizes.get(code, 0) for code in codes)
         rows.append({"player": player, "name": info["name"], "provinces": len(codes), "fields": fields,
                      "share": fields / total if total else 0, "income": income_of(state, player),
                      "upkeep": upkeep_of(state, player), "armies": len(armies),
-                     "divisions": sum(a["divisions"] for a in armies)})
+                     "divisions": sum(a["divisions"] for a in armies),
+                     "ships": sum(a["divisions"] for a in units if state.is_fleet(a))})
     return rows

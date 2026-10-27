@@ -5,7 +5,7 @@ import math
 from fractions import Fraction
 from pathlib import Path
 
-from .hexgrid import parse_grid, tup
+from .hexgrid import neighbours, parse_grid, tup
 
 RULES_FILE = Path(__file__).resolve().parent.parent / "rules" / "default.json"
 SEA_TOKEN = "~~"
@@ -84,6 +84,7 @@ def validate_map(data):
             raise MapError(f"Unbekanntes Feld-Token: {token}")
     for code, prov in data["provinces"].items():
         check_province(code, prov, fields, data["nations"])
+        check_ports(code, prov, cells)
     for army in data.get("start_armies", []):
         check_start_army(army, cells, data)
 
@@ -96,6 +97,15 @@ def check_province(code, prov, fields, nations):
         raise MapError(f"Hauptstadt von {code} liegt nicht in der Provinz")
     if prov["owner"] is not None and prov["owner"] not in nations:
         raise MapError(f"Besitzer von {code} existiert nicht: {prov['owner']}")
+
+
+def check_ports(code, prov, cells):
+    """Ports: fields of the province with at least one sea neighbour."""
+    for port in prov.get("ports", []):
+        if cells.get(tup(port)) != code:
+            raise MapError(f"Hafen von {code} liegt nicht in der Provinz")
+        if not any(cells.get(n) == SEA_TOKEN for n in neighbours(*tup(port))):
+            raise MapError(f"Hafen von {code} liegt nicht an der Küste")
 
 
 def check_start_army(army, cells, data):

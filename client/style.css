@@ -75,6 +75,9 @@ svg text{pointer-events:none;font-family:var(--font-body);fill:var(--badge-fg);p
 .army .divs{font-size:15px;font-weight:700;fill:#2b1a10;stroke:none}
 .fresh{fill:#ffd24a}.army .fresh{fill:#a35c00}
 .has-fresh .badge{stroke:#ffe48a}
+.army.fleet .badge{fill:#dfe9ef;stroke:#7fa3b8}
+.port{font-size:9px;fill:#1d1008;opacity:.75;pointer-events:none}
+.linkflag{font-size:9px;pointer-events:none}
 .fmseal{fill:var(--seal);stroke:var(--gold);stroke-width:1;pointer-events:none}
 .fmflag{font-size:10px;font-weight:700;stroke-width:0;fill:#fbeed0}
 .cap{pointer-events:none;filter:drop-shadow(0 1px 1px #000a)}

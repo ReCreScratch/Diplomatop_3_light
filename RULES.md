@@ -201,19 +201,50 @@ Applies to nations without a player and to nations of surrendered players. Set i
   (e.g. heatmap of fields where most divisions and ships died, gold generated per nation, enemy divisions and ships
   destroyed per nation).
 
-## 10. Naval system (milestone 2 – provisional)
-- **Transports:** a land army can put to sea only from an own port field to an adjacent sea field *[decided]*. It moves
-  1 field per turn, combat value `transport_combat_value` (0.25), and can land on any land field.
+## 10. Naval system (milestone 2)
+### 10.1 Ports
+- A **port** is a specific land field of a province, set in the map (`ports` of the province) *[4.0, G33]*.
+  It belongs to the owner of its province.
+- Europa map placeholder: one port per coastal province, on the city if the city is at the coast, else on the coastal
+  field next to the city *[default, M7]*.
+
+### 10.2 Armies at sea (transports)
+- A land army can put to sea only **from an own port field** to an adjacent sea field *[decided]*. Putting to sea and
+  landing each end that turn's move *[default, G34]*.
+- At sea an army moves `transport_move_range` (1) field per turn; forced march has no effect at sea *[default]*.
+  Its combat value at sea is `transport_combat_value` (0.25) per division, hit points stay 1.
+- It can land on **any** adjacent land field. If an enemy army stands there it fights with 0.25; a landing on an
+  enemy city is a normal conquest attempt *[decided, G25/G29]*.
+- An army putting to sea onto a sea field with enemy units fights there with 0.25 *[decided]*. Land armies can attack
+  sea units only this way. Fleets never attack land *[decided, 4.0]*.
+- Armies at sea cannot be reinforced or disbanded *[decided, G38]*.
+
+### 10.3 Fleets
 - **Fleets** consist of **ships** *[4.0]*. A ship is built in an own port: the player picks a sea field next to the
-  port, the ship appears there next turn. Cost `ship_cost` (5), upkeep `upkeep_per_ship` (0.25). No size limit.
-- Per ship: combat value `ship_combat_value` (4), hit points `ship_hp` (4). Range `fleet_move_range` (3) *[4.0]*.
-  Fleets cannot enter land.
-- A fleet and an army can share a sea field as long as they are the same player's or allied *[4.0]*.
-- **Linking** *[4.0]*: a fleet and an army on the same sea field can be linked. They then move together and the
-  fleet's range drops to 1 until the link is removed.
-- **Tank rule** *[decided, 4.0 – replaces G35]*: when units enter a sea field with enemy units, damage on each side goes
-  first to the fleet's hit points and then to the army's. Only units on the **same** sea field are protected.
-- Open: G25, G29, G34, G36, G38, G49 (section 14).
+  port, the ship appears there in the recruitment phase and cannot move that turn (like divisions). Cost `ship_cost` (5),
+  upkeep `upkeep_per_ship` (0.25). Ships count against the recruit limit *[default]*. No size limit.
+- Ships are disbanded only on a sea field next to an own port; refund `ship_disband_refund` (2) per ship *[decided, G60]*.
+- Per ship: combat value 4, hit points 4 (`unit_types.ship`). Range `fleet_move_range` (3) *[4.0]*.
+  Fleets have no forced march *[decided]*. Fleets never enter land.
+- A player has at most **one fleet and one army** per sea field; own fleets ending on the same field merge, like
+  armies *[decided, G36]*. Fleets can be split like armies.
+- A fleet and an army can share a sea field as long as they are the same player's (or allied, milestone 3) *[4.0]*.
+- A fleet entering a sea field with enemy units fights there and stops, like armies.
+
+### 10.4 Linking
+- A fleet and an army of the same player on the same sea field can be **linked** *[4.0]*. They then move together
+  (one move order for either of them) and the fleet's range drops to `fleet_linked_move_range` (1) until the link is
+  removed. A linked army is still a transport (0.25) *[decided, G49]*.
+- Linking and unlinking take effect before movement, like forced march *[default]*. Landing the army or splitting
+  either unit ends the link *[default]*.
+
+### 10.5 Combat at sea (tank rule)
+- *[decided, 4.0 – replaces G35]*: all units of one player on a sea field fight as **one side**. Its damage is the sum
+  of all its units' combat values. The damage it takes goes first to the fleet's hit points and only the rest to the
+  army's. Only units on the **same** sea field are protected.
+- Losses: the fleet loses ships by the same rule as divisions (section 6, `survivor_rounding`), then the army.
+- If the attacking side survives and the defending side is destroyed, the attacker moves onto the field; if both
+  survive, the attacker stays where it came from (G59).
 
 ## 11. Diplomacy, alliances & victory (milestone 3 – provisional)
 - **"Do not attack" toggle** *[4.0]*: each player can switch it on for any other player. While both have it on for
@@ -240,6 +271,10 @@ Applies to nations without a player and to nations of surrendered players. Set i
   nations, victory conditions (max. alliance size, shares, `alliance_min_turns`) and the AI ruleset.
 - **Saving** *[4.0]*: an importable save is written at the end of every turn, so a game can continue after a crash
   (already in milestone 1).
+- **Reconnect** *[decided]*: a player who drops out without surrendering (browser closed, connection lost, device
+  changed) can reconnect and re-enter the running game as their nation. Their orders and ready state of the current
+  turn are kept. Milestone 1 already does this in the same browser (token in the link and in browser storage);
+  missing is re-entry without the personal link (G62).
 - **Video** *[4.0]*: a screenshot of the map is stored at the end of every turn; at the end of the game they are
   exported as an mp4 video.
 
@@ -272,8 +307,10 @@ Applies to nations without a player and to nations of surrendered players. Set i
 | `show_other_players_gold` | false | G51 |
 | `ai_recruit_per_city` | 1 | AI ruleset, section 8.2 |
 | `ship_cost` / `upkeep_per_ship` | 5 / 0.25 | milestone 2 |
-| `ship_combat_value` / `ship_hp` | 4 / 4 | milestone 2 |
-| `fleet_move_range` / `fleet_forced_march_range` | 3 / 4 | milestone 2 (linked to an army: 1) |
+| `unit_types.ship.combat_value` / `hp` | 4 / 4 | per ship, milestone 2 |
+| `fleet_move_range` / `fleet_linked_move_range` | 3 / 1 | milestone 2 |
+| `ship_disband_refund` | 2 | milestone 2 |
+| `transport_move_range` | 1 | milestone 2 |
 | `transport_combat_value` | 0.25 | milestone 2 |
 | `gift_delay_turns` | 10 | milestone 3 |
 | `victory_share_single` | 0.40 | share of land fields, milestone 3 |
@@ -301,16 +338,10 @@ Applies to nations without a player and to nations of surrendered players. Set i
 | M5 | Only 7 nations on this map, the game supports 12. Fine for testing? | 7 |
 | M6 | Province and city names (chosen by Claude) – OK? | see `map.json` |
 
-**Ships (milestone 2):**
+**Ships (milestone 2):** G25, G29, G34, G36, G38, G49, G60 decided (section 10). Open:
 | ID | Question | Default |
 |---|---|---|
-| G25 | Can a land army attack a transport at sea, or a transport attack a land field directly? | transport may attack land with 0.25; land armies can't attack sea |
-| G29 | Can a transport land directly on an enemy city? | yes, counts as an attack with 0.25 |
-| G34 | Do embarking and disembarking use a normal 1-field move? | yes |
-| G36 | Several fleets on one field: which takes damage first? | largest first |
-| G38 | Can transports be reinforced? | no |
-| G49 | Is an army linked to a fleet still a transport (combat value 0.25)? | yes |
-| G60 | Where are ships disbanded, and is there a refund? | next to an own port, like divisions |
+| M7 | Where are the ports on the Europa map? | one per coastal province, on or next to the city |
 
 **Alliances & victory (milestone 3):**
 | ID | Question | Default |
@@ -322,6 +353,11 @@ Applies to nations without a player and to nations of surrendered players. Set i
 | G48 | Does the gift delay apply to conquered provinces too? | no, only gifted/sold |
 | G9 | How does selling work (offer → accept, atomic swap)? | offer/accept, atomic |
 | G61 | Does "do not attack" take effect immediately or next turn? | next turn's resolution |
+
+**Technical:**
+| ID | Question | Default |
+|---|---|---|
+| G62 | How does a player re-enter without their personal link (new device, cleared browser)? | the join screen of a running game lists the nations; picking one asks the host to confirm (or a per-player rejoin code shown in the game) |
 
 ---
 

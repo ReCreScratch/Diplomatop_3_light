@@ -55,7 +55,8 @@ def test_rules_have_all_section_13_settings():
                 "combat_formula", "conquest_cost_factor", "conquest_allow_army_used_up", "turn_order_rule",
                 "turn_timer_seconds", "start_gold", "show_other_players_gold", "gift_delay_turns",
                 "victory_share_single", "victory_share_alliance", "transport_combat_value",
-                "fleet_move_range", "fleet_forced_march_range"):
+                "fleet_move_range", "fleet_linked_move_range", "transport_move_range", "ship_cost",
+                "upkeep_per_ship", "ship_disband_refund"):
         assert key in rules
 
 

@@ -171,7 +171,8 @@ the top-left token. Tokens:
 - `~~` sea, `##` edge of the map (not playable), `..` no field
 - `?SE`, `?RU`, `?TR` – land without provinces yet (Scandinavia, Russia, Ottoman region); blocked for now
 
-**Provinces:** `{"name", "capital_name", "capital": [c, r], "income", "owner"}`. Ports are added in milestone 2.
+**Provinces:** `{"name", "capital_name", "capital": [c, r], "income", "owner", "ports": [[c, r], ...]}`. A port is a
+field of the province next to the sea (checked by the loader). Europa ports are placeholders (RULES.md M7).
 
 The loader checks: known tokens, every province has fields and its capital inside it, every owner exists,
 start armies stand on province fields. Connectivity is not checked, because provinces may have separate parts
@@ -212,3 +213,5 @@ Milestone 1 build order: engine with tests on a tiny test map → server → cli
 - [x] User provides the map picture → recreated as `maps/europa/` (open points M1–M6 in RULES.md)
 - [x] User gives the go to start
 - [x] Milestone 1 built (engine, server, client); 105 tests pass. Next: playtest online with friends.
+- [x] Rules reworked for Diplomatio 4.0 (RULES.md).
+- [x] Milestone 2 built: ports, ships, armies at sea, linking, sea combat; 160 tests pass.

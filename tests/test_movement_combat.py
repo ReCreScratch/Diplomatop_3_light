@@ -70,9 +70,9 @@ def test_forced_march_off_restores_range():
 def test_path_errors():
     state = make_game(move_range=3)
     put(state, "AA", A1_CAP, 3)
-    put(state, "AA", [0, 3], 2)
+    put(state, "AA", [1, 3], 2)
     assert errors_of(state, "AA", move("a1", 3, A2_CAP))[0]                    # not adjacent
-    assert errors_of(state, "AA", move("a2", 2, SEA))[0]                       # sea
+    assert errors_of(state, "AA", move("a2", 2, [1, 4]))[0] == ["Ablegen geht nur von einem eigenen Hafen."]
     assert errors_of(state, "AA", move("a1", 3))[0]                            # empty
     assert errors_of(state, "AA", move("a1", 4, A1_MID))[0]                    # too many divisions
     assert errors_of(state, "AA", move("a9", 1, A1_MID))[0]                    # unknown army
@@ -295,16 +295,16 @@ def test_fight_stops_movement():
 
 
 def side(divisions, value=1):
-    return {"divisions": divisions, "value": Fraction(value), "hp": Fraction(1)}
+    return [{"divisions": divisions, "value": Fraction(value), "hp": Fraction(1)}]
 
 
 def test_formula_functions_directly():
     rules = engine.load_rules({}, {})
-    assert hp_attrition(rules, side(10, Fraction(1, 2)), side(4)) == (4, 4)
-    assert hp_attrition(rules, side(3), side(3)) == (3, 3)
-    assert hp_attrition(rules, side(3), side(5)) == (3, 3)
-    assert strength_formula(rules, side(10, Fraction(1, 2)), side(4)) == (8, 4)
-    assert strength_formula(rules, side(3), side(3)) == (3, 3)
+    assert hp_attrition(rules, side(10, Fraction(1, 2)), side(4)) == ([4], [4])
+    assert hp_attrition(rules, side(3), side(3)) == ([3], [3])
+    assert hp_attrition(rules, side(3), side(5)) == ([3], [3])
+    assert strength_formula(rules, side(10, Fraction(1, 2)), side(4)) == ([8], [4])
+    assert strength_formula(rules, side(3), side(3)) == ([3], [3])
 
 
 def test_old_3_0_formula_still_selectable():
@@ -481,7 +481,7 @@ def test_board_rows():
     put(state, "AA", A1_CAP, 6)
     row = engine.board(state)[0]
     assert row == {"player": "AA", "name": "p_AA", "provinces": 2, "fields": 9, "share": 9 / 24, "income": 4,
-                   "upkeep": 1.5, "armies": 1, "divisions": 6}
+                   "upkeep": 1.5, "armies": 1, "divisions": 6, "ships": 0}
 
 
 def test_player_without_provinces_stays():

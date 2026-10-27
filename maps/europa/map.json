@@ -42,105 +42,120 @@
    "capital_name": "Reykjavík",
    "capital": [16, 3],
    "income": 5,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[15, 4]]
   },
   "GB2": {
    "name": "Highlands",
    "capital_name": "Inverness",
    "capital": [21, 10],
    "income": 3,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[21, 10]]
   },
   "GB3": {
    "name": "Strathclyde",
    "capital_name": "Glasgow",
    "capital": [19, 12],
    "income": 2,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[19, 12]]
   },
   "GB4": {
    "name": "Lothian",
    "capital_name": "Edinburgh",
    "capital": [21, 13],
    "income": 2,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[21, 13]]
   },
   "GB5": {
    "name": "Northumbria",
    "capital_name": "York",
    "capital": [20, 14],
    "income": 2,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[19, 14]]
   },
   "GB6": {
    "name": "Wales",
    "capital_name": "Cardiff",
    "capital": [19, 16],
    "income": 2,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[18, 15]]
   },
   "GB7": {
    "name": "Südengland",
    "capital_name": "London",
    "capital": [21, 16],
    "income": 3,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[21, 17]]
   },
   "GB8": {
    "name": "Ulster",
    "capital_name": "Belfast",
    "capital": [16, 13],
    "income": 2,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[16, 12]]
   },
   "GB9": {
    "name": "Leinster",
    "capital_name": "Dublin",
    "capital": [15, 15],
    "income": 2,
-   "owner": "GB"
+   "owner": "GB",
+   "ports": [[15, 15]]
   },
   "ES1": {
    "name": "Galicien",
    "capital_name": "Santiago",
    "capital": [11, 25],
    "income": 2,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[11, 25]]
   },
   "ES2": {
    "name": "Asturien",
    "capital_name": "Oviedo",
    "capital": [13, 25],
    "income": 2,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[13, 24]]
   },
   "ES3": {
    "name": "León",
    "capital_name": "León",
    "capital": [12, 26],
    "income": 3,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[11, 26]]
   },
   "ES4": {
    "name": "Aragón",
    "capital_name": "Saragossa",
    "capital": [16, 26],
    "income": 3,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[16, 25]]
   },
   "ES5": {
    "name": "Katalonien",
    "capital_name": "Barcelona",
    "capital": [18, 26],
    "income": 3,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[18, 27]]
   },
   "ES6": {
    "name": "Nordportugal",
    "capital_name": "Porto",
    "capital": [11, 28],
    "income": 3,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[10, 27]]
   },
   "ES7": {
    "name": "Kastilien",
@@ -154,42 +169,48 @@
    "capital_name": "Valencia",
    "capital": [17, 29],
    "income": 3,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[17, 30]]
   },
   "ES9": {
    "name": "Südportugal",
    "capital_name": "Lissabon",
    "capital": [12, 29],
    "income": 3,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[11, 30]]
   },
   "ES10": {
    "name": "Andalusien",
    "capital_name": "Sevilla",
    "capital": [15, 30],
    "income": 2,
-   "owner": "ES"
+   "owner": "ES",
+   "ports": [[14, 30]]
   },
   "FR1": {
    "name": "Bretagne",
    "capital_name": "Rennes",
    "capital": [19, 20],
    "income": 3,
-   "owner": "FR"
+   "owner": "FR",
+   "ports": [[18, 19]]
   },
   "FR2": {
    "name": "Normandie",
    "capital_name": "Rouen",
    "capital": [21, 20],
    "income": 3,
-   "owner": "FR"
+   "owner": "FR",
+   "ports": [[21, 19]]
   },
   "FR3": {
    "name": "Île-de-France",
    "capital_name": "Paris",
    "capital": [23, 19],
    "income": 3,
-   "owner": "FR"
+   "owner": "FR",
+   "ports": [[23, 18]]
   },
   "FR4": {
    "name": "Flandern",
@@ -203,7 +224,8 @@
    "capital_name": "Nantes",
    "capital": [20, 21],
    "income": 3,
-   "owner": "FR"
+   "owner": "FR",
+   "ports": [[19, 21]]
   },
   "FR6": {
    "name": "Orléanais",
@@ -224,42 +246,48 @@
    "capital_name": "Bordeaux",
    "capital": [19, 24],
    "income": 3,
-   "owner": "FR"
+   "owner": "FR",
+   "ports": [[19, 24]]
   },
   "FR9": {
    "name": "Languedoc",
    "capital_name": "Toulouse",
    "capital": [22, 24],
    "income": 3,
-   "owner": "FR"
+   "owner": "FR",
+   "ports": [[22, 24]]
   },
   "FR10": {
    "name": "Provence",
    "capital_name": "Marseille",
    "capital": [24, 24],
    "income": 3,
-   "owner": "FR"
+   "owner": "FR",
+   "ports": [[24, 25]]
   },
   "DE1": {
    "name": "Dänemark",
    "capital_name": "Kopenhagen",
    "capital": [28, 13],
    "income": 3,
-   "owner": "DE"
+   "owner": "DE",
+   "ports": [[28, 13]]
   },
   "DE2": {
    "name": "Niederlande",
    "capital_name": "Amsterdam",
    "capital": [26, 16],
    "income": 4,
-   "owner": "DE"
+   "owner": "DE",
+   "ports": [[25, 16]]
   },
   "DE3": {
    "name": "Holstein",
    "capital_name": "Hamburg",
    "capital": [31, 16],
    "income": 3,
-   "owner": "DE"
+   "owner": "DE",
+   "ports": [[30, 15]]
   },
   "DE4": {
    "name": "Pommern",
@@ -273,7 +301,8 @@
    "capital_name": "Königsberg",
    "capital": [35, 15],
    "income": 3,
-   "owner": "DE"
+   "owner": "DE",
+   "ports": [[35, 15]]
   },
   "DE6": {
    "name": "Rheinland",
@@ -322,7 +351,8 @@
    "capital_name": "Wien",
    "capital": [32, 22],
    "income": 3,
-   "owner": "AT"
+   "owner": "AT",
+   "ports": [[31, 23]]
   },
   "AT3": {
    "name": "Böhmen",
@@ -357,7 +387,8 @@
    "capital_name": "Zagreb",
    "capital": [34, 23],
    "income": 4,
-   "owner": "AT"
+   "owner": "AT",
+   "ports": [[33, 24]]
   },
   "AT8": {
    "name": "Banat",
@@ -378,112 +409,128 @@
    "capital_name": "Sarajevo",
    "capital": [35, 25],
    "income": 3,
-   "owner": "AT"
+   "owner": "AT",
+   "ports": [[35, 26]]
   },
   "IT1": {
    "name": "Lombardei",
    "capital_name": "Mailand",
    "capital": [27, 24],
    "income": 3,
-   "owner": "IT"
+   "owner": "IT",
+   "ports": [[27, 24]]
   },
   "IT2": {
    "name": "Venetien",
    "capital_name": "Venedig",
    "capital": [29, 25],
    "income": 3,
-   "owner": "IT"
+   "owner": "IT",
+   "ports": [[29, 25]]
   },
   "IT3": {
    "name": "Korsika",
    "capital_name": "Ajaccio",
    "capital": [27, 27],
    "income": 1,
-   "owner": "IT"
+   "owner": "IT",
+   "ports": [[27, 27]]
   },
   "IT4": {
    "name": "Sardinien",
    "capital_name": "Cagliari",
    "capital": [27, 29],
    "income": 2,
-   "owner": "IT"
+   "owner": "IT",
+   "ports": [[27, 29]]
   },
   "IT5": {
    "name": "Toskana",
    "capital_name": "Florenz",
    "capital": [30, 27],
    "income": 2,
-   "owner": "IT"
+   "owner": "IT",
+   "ports": [[30, 27]]
   },
   "IT6": {
    "name": "Latium",
    "capital_name": "Rom",
    "capital": [32, 27],
    "income": 2,
-   "owner": "IT"
+   "owner": "IT",
+   "ports": [[32, 27]]
   },
   "IT7": {
    "name": "Kampanien",
    "capital_name": "Neapel",
    "capital": [34, 29],
    "income": 2,
-   "owner": "IT"
+   "owner": "IT",
+   "ports": [[34, 29]]
   },
   "IT8": {
    "name": "Sizilien",
    "capital_name": "Palermo",
    "capital": [32, 31],
    "income": 2,
-   "owner": "IT"
+   "owner": "IT",
+   "ports": [[32, 31]]
   },
   "NA1": {
    "name": "Marokko",
    "capital_name": "Rabat",
    "capital": [11, 34],
    "income": 3,
-   "owner": "NA"
+   "owner": "NA",
+   "ports": [[10, 33]]
   },
   "NA2": {
    "name": "Rif",
    "capital_name": "Tanger",
    "capital": [14, 33],
    "income": 2,
-   "owner": "NA"
+   "owner": "NA",
+   "ports": [[13, 33]]
   },
   "NA3": {
    "name": "Oranie",
    "capital_name": "Oran",
    "capital": [16, 33],
    "income": 2,
-   "owner": "NA"
+   "owner": "NA",
+   "ports": [[15, 33]]
   },
   "NA4": {
    "name": "Algier",
    "capital_name": "Algier",
    "capital": [19, 34],
    "income": 2,
-   "owner": "NA"
+   "owner": "NA",
+   "ports": [[18, 33]]
   },
   "NA5": {
    "name": "Konstantine",
    "capital_name": "Constantine",
    "capital": [23, 34],
    "income": 2,
-   "owner": "NA"
+   "owner": "NA",
+   "ports": [[22, 33]]
   },
   "NA6": {
    "name": "Tunesien",
    "capital_name": "Tunis",
    "capital": [25, 33],
    "income": 2,
-   "owner": "NA"
+   "owner": "NA",
+   "ports": [[25, 33]]
   },
   "NA7": {
    "name": "Tripolitanien",
    "capital_name": "Tripolis",
    "capital": [27, 34],
    "income": 2,
-   "owner": "NA"
+   "owner": "NA",
+   "ports": [[27, 33]]
   }
  },
  "grid": [

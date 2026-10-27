@@ -35,9 +35,9 @@ def game():
     return make_game()
 
 
-def put(state, owner, field, divisions, fresh=0, forced_march=False):
-    """Place an army directly."""
-    return state.new_army(owner, field, divisions, fresh=fresh, forced_march=forced_march)
+def put(state, owner, field, divisions, fresh=0, forced_march=False, unit=None):
+    """Place an army (or with unit='ship' a fleet) directly."""
+    return state.new_army(owner, field, divisions, fresh=fresh, forced_march=forced_march, unit=unit)
 
 
 def kinds(events):

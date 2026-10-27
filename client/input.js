@@ -4,10 +4,11 @@ import * as O from './orders.js';
 import * as Chat from './chat.js';
 import { api } from './api.js';
 import { neighbours, key } from './hex.js';
-import { $, esc, same, ctx, rules, P, tokenAt, passable, armyAt, ownArmyAt, isEnemyAt, ownCapitalAt, nName, pName, fieldName } from './ctx.js';
+import { $, esc, same, ctx, rules, P, tokenAt, passable, armyAt, unitsAt, ownUnitsAt, isEnemyAt, ownCapitalAt, nName, pName, fieldName,
+  isFleet, isSea, isOwnPort, nextToOwnPort, canStep } from './ctx.js';
 
 let hooks = { toast() {}, onEscape() {} };
-let sel = null;            // { f: field, n: count }
+let sel = null;            // { f: field, n: count, id: selected own unit on f (a sea field may hold a fleet and an army) }
 let wps = [];              // fixed waypoints of the route being drawn (the last leg follows the mouse)
 let reach = null;          // { kind: Map(key -> 'go'|'attack') } fields reachable this turn (informational overlay)
 let hoverF = null, mouse = null;
@@ -33,18 +34,29 @@ export function init(h) {
 }
 
 // ---------- selection ----------
-const selArmy = () => sel && ownArmyAt(sel.f);
+const selArmy = () => {
+  if (!sel) return null;
+  const own = ownUnitsAt(sel.f);
+  return own.find(a => a.id === sel.id) || own[0] || null;
+};
 const canRecruitHere = () => !!sel && !!ownCapitalAt(sel.f);   // recruiting only in own cities (4.0)
-const canDisband = a => !!ownCapitalAt(a.field);                  // disbanding too
+const canBuildHere = () => !!sel && nextToOwnPort(sel.f) && !isEnemyAt(sel.f);
+const canDisband = a => isFleet(a) ? nextToOwnPort(a.field) : !!ownCapitalAt(a.field);   // ships only next to an own port
+const otherHere = a => ownUnitsAt(a.field).find(u => u.id !== a.id && isFleet(u) !== isFleet(a)) || null;
+const canLink = a => isSea(a.field) && !!otherHere(a);
+const unitWord = a => isFleet(a) ? ['Schiff', 'Schiffe'] : ['Division', 'Divisionen'];
+const selectable = f => ownUnitsAt(f).length > 0 || !!ownCapitalAt(f) || nextToOwnPort(f);
 const defaultN = () => { const a = selArmy(); return a ? Math.max(1, O.movableLeft(a)) : 1; };
 function nMax() {
   const a = selArmy();
-  return Math.max(1, a ? O.movableLeft(a) : 0, canRecruitHere() ? O.budget().canRecruit : 0);
+  return Math.max(1, a ? O.movableLeft(a) : 0, canRecruitHere() ? O.budget().canRecruit : 0,
+    canBuildHere() ? O.budget().canBuild : 0);
 }
 const clampN = () => { if (sel) sel.n = Math.max(1, Math.min(sel.n, nMax())); };
 
-function select(f) {
-  sel = f ? { f, n: 1 } : null; wps = [];
+function select(f, id) {
+  const own = f ? ownUnitsAt(f) : [];
+  sel = f ? { f, n: 1, id: id || (own.find(a => !isFleet(a)) || own[0] || {}).id } : null; wps = [];
   if (sel) sel.n = defaultN();
   R.clearHighlight('sel'); if (sel) R.highlight([f], 'sel');
   update();
@@ -54,7 +66,7 @@ export function reset() { sel = null; wps = []; pv.clear(); hideMenu(); R.clearH
 
 // Called after new server state or a changed order list.
 export function update() {
-  if (sel && !(selArmy() || ownCapitalAt(sel.f))) { sel = null; R.clearHighlight('sel'); }
+  if (sel && !selectable(sel.f)) { sel = null; R.clearHighlight('sel'); }
   if (!sel || !selArmy() || O.movableLeft(selArmy()) < 1) wps = [];
   clampN(); computeReach(); renderToolbar(); hint();
   if (hoverF) onHover(hoverF, null); else hideTip();
@@ -64,8 +76,9 @@ export const clearPreviews = () => pv.clear();
 function cycle(dir) {
   const own = Object.values(ctx.G.armies).filter(a => a.owner === ctx.G.me).sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }));
   if (!own.length) return;
-  const i = sel ? own.findIndex(a => same(a.field, sel.f)) : -1;
-  select(own[(i + dir + own.length) % own.length].field);
+  const i = sel ? own.findIndex(a => a.id === (selArmy() || {}).id) : -1;
+  const next = own[(i + dir + own.length) % own.length];
+  select(next.field, next.id);
 }
 
 // ---------- reach (informational overlay) ----------
@@ -73,16 +86,17 @@ function computeReach() {
   reach = null;
   const a = selArmy();
   if (a && O.movableLeft(a) > 0) {
-    const origin = a.field, maxD = O.rangeOf(a);
+    const origin = a.field, group = O.groupMove(a, isFleet(a) ? [] : [a.field]), maxD = O.rangeOf(a, group);
     const dist = new Map([[key(origin), 0]]), kind = new Map();
     let q = [origin];
     for (let d = 0; d < maxD; d++) {
       const nq = [];
       for (const f of q) for (const n of neighbours(f[0], f[1])) {
         const k = key(n);
-        if (dist.has(k) || !passable(n)) continue;
+        if (dist.has(k) || !canStep(a, f, n, group)) continue;
         dist.set(k, d + 1);
-        if (isEnemyAt(n)) kind.set(k, 'attack'); else { kind.set(k, 'go'); nq.push(n); }  // enemy armies stop movement
+        if (isEnemyAt(n)) kind.set(k, 'attack');                                   // enemies stop movement
+        else { kind.set(k, 'go'); if (isSea(n) === isSea(origin)) nq.push(n); }    // putting to sea / landing too
       }
       q = nq;
     }
@@ -94,7 +108,8 @@ function computeReach() {
 
 // ---------- route ----------
 // Shortest passable leg (no range limit); enemy armies are only entered when they are the goal, if there is a way around.
-function leg(from, to) {
+function leg(a, from, to) {
+  const group = O.groupMove(a, isFleet(a) ? [] : [to]);
   for (const avoid of [true, false]) {
     const prev = new Map([[key(from), null]]);
     let q = [from];
@@ -102,7 +117,7 @@ function leg(from, to) {
       const nq = [];
       for (const f of q) for (const n of neighbours(f[0], f[1])) {
         const k = key(n);
-        if (prev.has(k) || !passable(n) || (avoid && isEnemyAt(n) && !same(n, to))) continue;
+        if (prev.has(k) || !canStep(a, f, n, group) || (avoid && isEnemyAt(n) && !same(n, to))) continue;
         prev.set(k, f); nq.push(n);
       }
       q = nq;
@@ -121,9 +136,9 @@ function buildRoute(cursor) {
   const pts = [a.field, ...wps];
   if (cursor && !same(cursor, pts[pts.length - 1])) pts.push(cursor);
   const full = [];
-  for (let i = 1; i < pts.length; i++) { const l = leg(pts[i - 1], pts[i]); if (!l) return null; full.push(...l); }
+  for (let i = 1; i < pts.length; i++) { const l = leg(a, pts[i - 1], pts[i]); if (!l) return null; full.push(...l); }
   if (!full.length) return null;
-  let stop = Math.min(full.length, O.rangeOf(a)), attack = false;
+  let stop = O.thisTurn(a, full), attack = false;
   for (let i = 0; i < stop; i++) if (isEnemyAt(full[i])) { stop = i + 1; attack = true; break; }
   return { a, full, near: full.slice(0, stop), far: full.slice(stop - 1), attack };
 }
@@ -145,11 +160,12 @@ function routeToOrder(a, count, rt) {
 function confirmRoute(cursor) {
   const a = selArmy(), rt = a && buildRoute(cursor);
   if (!rt) return;
-  const k = Math.min(sel.n, O.movableLeft(a));
+  const group = O.groupMove(a, rt.full);
+  const k = group ? a.divisions : Math.min(sel.n, O.movableLeft(a));   // a linked pair moves whole
   if (k < 1) { hooks.toast('Alle Divisionen dieser Armee haben schon einen Zugbefehl.'); return; }
   const o = routeToOrder(a, k, rt);
   if (rt.near.length < rt.full.length) {
-    hooks.toast(`Marsch nach ${fieldName(rt.full[rt.full.length - 1])}: ca. ${Math.ceil(rt.full.length / O.rangeOf(a))} Runden`);
+    hooks.toast(`Marsch nach ${fieldName(rt.full[rt.full.length - 1])}: ca. ${Math.ceil(rt.full.length / O.rangeOf(a, group))} Runden`);
   }
   wps = []; R.showRoute(null);
   O.add(o);                       // a further move splits the army more (G56)
@@ -166,8 +182,16 @@ function onField(f, e) {
     if (same(f, wps[wps.length - 1])) confirmRoute(null); else if (passable(f)) addWp(f); else hooks.toast('Nicht passierbar.');
     return;
   }
-  if (ownArmyAt(f) || ownCapitalAt(f)) { if (!sel || !same(sel.f, f)) select(f); return; }
+  const a = selArmy();
+  if (routing() && isSea(f) && !same(f, sel.f) && !ownUnitsAt(f).some(u => isFleet(u) === isFleet(a))) { addWp(f); return; }   // put to sea / sail there
+  if (selectable(f)) {
+    const own = ownUnitsAt(f);
+    if (!sel || !same(sel.f, f)) select(f);
+    else if (own.length > 1) { const i = own.findIndex(a => a.id === sel.id); select(f, own[(i + 1) % own.length].id); }   // second click: the other unit
+    return;
+  }
   if (routing() && passable(f)) { addWp(f); return; }
+  if (!sel && nextToOwnPort(f)) { select(f); return; }
   if (sel && passable(f) && selArmy()) { hooks.toast('Alle Divisionen dieser Armee haben schon einen Zugbefehl.'); return; }
   select(null);
 }
@@ -195,6 +219,18 @@ function doRecruit() {
   if (k < 1) { hooks.toast(recruitReason(b)); return; }
   O.add({ type: 'recruit', field: sel.f, count: k });
 }
+function doBuild() {
+  if (!canBuildHere()) return;
+  const b = O.budget(), k = Math.min(sel.n, b.canBuild);
+  if (k < 1) { hooks.toast(b.recLeft < 1 ? 'Rekrutierungslimit erreicht.' : 'Kein Gold mehr.'); return; }
+  O.add({ type: 'build_ship', field: sel.f, count: k });
+}
+function doLink() {
+  const a = selArmy(); if (!a || !canLink(a)) return;
+  const p = O.partnerOf(a), other = otherHere(a);
+  if (p) O.add({ type: 'unlink', army: a.id });
+  else O.add({ type: 'link', fleet: isFleet(a) ? a.id : other.id, army: isFleet(a) ? other.id : a.id });
+}
 function doDisband() {
   const a = selArmy(); if (!a) return;
   const k = canDisband(a) ? Math.min(sel.n, O.disbandMax(a)) : 0;
@@ -202,7 +238,7 @@ function doDisband() {
   O.add({ type: 'disband', army: a.id, count: k });
 }
 function doForcedMarch() {
-  const a = selArmy(); if (!a) return;
+  const a = selArmy(); if (!a || isFleet(a)) return;
   O.setForcedMarch(a, !O.fmOn(a));
 }
 function doHalt() {
@@ -210,11 +246,12 @@ function doHalt() {
   if (a && O.marching(a)) O.add({ type: 'halt', army: a.id });
 }
 const baseN = () => { const a = selArmy(); return a ? Math.max(1, O.movableLeft(a)) : nMax(); };
-const act = name => ({ dec: () => step(-1), inc: () => step(1), q1: () => setN(1), qh: () => setN(Math.max(1, Math.floor(baseN() / 2))), qa: () => setN(baseN()), rec: doRecruit, dis: doDisband, fm: doForcedMarch, halt: doHalt })[name]();
+const act = name => ({ dec: () => step(-1), inc: () => step(1), q1: () => setN(1), qh: () => setN(Math.max(1, Math.floor(baseN() / 2))), qa: () => setN(baseN()), rec: doRecruit, ship: doBuild, link: doLink, dis: doDisband, fm: doForcedMarch, halt: doHalt,
+  swap: () => { const a = selArmy(), o = a && otherHere(a); if (o) select(o.field, o.id); } })[name]();
 function setN(v) { if (sel) { sel.n = Math.max(1, Math.min(nMax(), v)); renderToolbar(); if (hoverF) onHover(hoverF, null); } }
 function step(d) { if (sel) setN(sel.n + d); }
 const recruitReason = b => b.recLeft < 1 ? 'Rekrutierungslimit erreicht.' : 'Kein Gold mehr.';
-const disbandReason = a => !canDisband(a) ? 'Abrüsten geht nur in eigenen Städten.' : O.moveOf(a.id) ? 'Alle übrigen Divisionen haben einen Zugbefehl.' : 'Keine Division zum Abrüsten.';
+const disbandReason = a => !canDisband(a) ? (isFleet(a) ? 'Schiffe werden nur neben einem eigenen Hafen abgerüstet.' : 'Abrüsten geht nur in eigenen Städten.') : O.moveOf(a.id) ? 'Alle übrigen Divisionen haben einen Zugbefehl.' : 'Keine Division zum Abrüsten.';
 
 // ---------- keyboard ----------
 function onKey(e) {
@@ -239,6 +276,9 @@ function onKey(e) {
   else if (k === 'r' || k === 'R') doRecruit();
   else if (k === 'd' || k === 'D') doDisband();
   else if (k === 'g' || k === 'G') doForcedMarch();
+  else if (k === 'b' || k === 'B') doBuild();
+  else if (k === 'v' || k === 'V') doLink();
+  else if (k === 'w' || k === 'W') act('swap');
   else if (k === 'h' || k === 'H') doHalt();
 }
 
@@ -249,17 +289,24 @@ function renderToolbar() {
   const a = selArmy(), b = O.budget(), mx = nMax(), base = baseN(), left = a ? O.movableLeft(a) : 0;
   const btn = (name, label, hot, ok, why) => `<button data-act="${name}" ${ok ? '' : 'disabled'} title="${esc(ok ? '' : why)}">${label} <kbd>${hot}</kbd></button>`;
   let h = '';
-  if (a) h += `<div class="tb-row"><span class="tb-info">Armee ${esc(a.id)}: ${a.divisions} Div.${a.fresh ? ` (${a.fresh} neu)` : ''}${a.route ? ` · marschiert nach ${esc(fieldName(a.route[a.route.length - 1]))}` : ''}</span></div>`;
+  if (a) {
+    const other = otherHere(a), p = O.partnerOf(a);
+    h += `<div class="tb-row"><span class="tb-info">${isFleet(a) ? 'Flotte' : 'Armee'} ${esc(a.id)}: ${a.divisions} ${isFleet(a) ? 'Schiffe' : 'Div.'}${a.fresh ? ` (${a.fresh} neu)` : ''}` +
+      `${p ? ' · verbunden' : ''}${a.route ? ` · unterwegs nach ${esc(fieldName(a.route[a.route.length - 1]))}` : ''}</span>` +
+      `${other ? `<button data-act="swap" title="Andere Einheit auf diesem Feld wählen">${isFleet(other) ? 'Zur Flotte' : 'Zur Armee'} <kbd>W</kbd></button>` : ''}</div>`;
+  }
   h += `<div class="tb-row"><span class="tb-step"><button data-act="dec" ${sel.n > 1 ? '' : 'disabled'}>−</button><b>${sel.n}</b>` +
     `<button data-act="inc" ${sel.n < mx ? '' : 'disabled'}>+</button></span><span class="tb-von">von ${base}</span>` +
     `<button data-act="q1" title="Eine Division">1</button><button data-act="qh" title="Die Hälfte">½</button><button data-act="qa" title="Alle">Alle</button></div>`;
-  if (a) h += `<div class="tb-row tb-rest ${left ? '' : 'done'}">Ohne Befehl: <b>${left}</b> von ${a.divisions} Div.</div>`;
+  if (a) h += `<div class="tb-row tb-rest ${left ? '' : 'done'}">Ohne Befehl: <b>${left}</b> von ${a.divisions} ${isFleet(a) ? 'Schiffen' : 'Div.'}</div>`;
   let row = '';
   if (canRecruitHere()) row += btn('rec', `Rekrutieren +${Math.max(1, Math.min(sel.n, b.canRecruit))}`, 'R', b.canRecruit > 0, recruitReason(b));
+  if (canBuildHere()) row += btn('ship', `Schiff bauen +${Math.max(1, Math.min(sel.n, b.canBuild))}`, 'B', b.canBuild > 0, recruitReason({ recLeft: b.recLeft }));
   if (a) {
     const dm = O.disbandMax(a);
     row += btn('dis', `Abrüsten ${Math.max(1, Math.min(sel.n, dm))}`, 'D', dm > 0 && canDisband(a), disbandReason(a));
-    row += btn('fm', `Gewaltmarsch ${O.fmOn(a) ? 'aus' : 'an'}`, 'G', true, '');
+    if (!isFleet(a) && !isSea(a.field)) row += btn('fm', `Gewaltmarsch ${O.fmOn(a) ? 'aus' : 'an'}`, 'G', true, '');
+    if (canLink(a)) row += btn('link', O.partnerOf(a) ? 'Trennen' : 'Verbinden', 'V', true, '');
     if (O.marching(a)) row += btn('halt', 'Halt', 'H', true, '');
   }
   if (row) h += `<div class="tb-row">${row}</div>`;
@@ -309,16 +356,21 @@ function hint() {
   const a = sel && selArmy();
   $('ib-hint').textContent = !sel ? 'Eigene Armee oder Hauptstadt anklicken · Tab: nächste Armee · Strg+Z: rückgängig'
     : a ? (reach ? (wps.length ? 'Weiter klicken · letztes Feld nochmal oder Enter = bestätigen · Rücktaste/Rechtsklick: Wegpunkt zurück · Esc: Weg verwerfen'
-        : 'Felder anklicken für den Weg · G Gewaltmarsch · +/− Anzahl · Esc') : 'Keine beweglichen Divisionen · R rekrutieren · D abrüsten · Esc')
-      : 'R rekrutieren · +/− Anzahl · Esc';
+        : `Felder anklicken für den Weg · ${isFleet(a) || isSea(a.field) ? 'V verbinden/trennen · W andere Einheit' : 'G Gewaltmarsch'} · +/− Anzahl · Esc`) : 'Keine beweglichen Divisionen · R rekrutieren · D abrüsten · Esc')
+      : canBuildHere() ? 'B Schiff bauen · +/− Anzahl · Esc' : 'R rekrutieren · +/− Anzahl · Esc';
 }
 function fieldInfo(f) {
-  const tok = tokenAt(f), prov = P()[tok], a = armyAt(f);
+  const tok = tokenAt(f), prov = P()[tok];
   let s;
   if (prov) {
     const o = ctx.G.owners[tok];
     s = `${prov.name} (${o ? nName(o) : 'neutral'}) · Hauptstadt ${prov.capital_name} · Einkommen ${prov.income} · Eroberung kostet ${prov.income * rules().conquest_cost_factor} Div.`;
-  } else s = tok === '~~' ? 'Meer' : 'Nicht passierbar';
-  if (a) s += ` · Armee ${a.id} (${nName(a.owner)}): ${a.divisions} Div.${a.forced_march ? ', Gewaltmarsch' : ''}`;
+    if ((prov.ports || []).some(q => same(q, f))) s += ' · Hafen';
+  } else s = isSea(f) ? 'Meer' : 'Nicht passierbar';
+  for (const a of unitsAt(f)) {
+    s += isFleet(a) ? ` · Flotte ${a.id} (${nName(a.owner)}): ${a.divisions} Schiffe`
+      : ` · Armee ${a.id} (${nName(a.owner)}): ${a.divisions} Div.${a.forced_march && !isSea(f) ? ', Gewaltmarsch' : ''}`;
+    if (a.linked) s += ', verbunden';
+  }
   return s;
 }

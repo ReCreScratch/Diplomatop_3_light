@@ -27,6 +27,7 @@ class Pending:
         self.moved = {}         # army id -> divisions already ordered to move
         self.toggles = {}       # army id -> forced march after this turn's toggle orders
         self.given = set()      # provinces already offered as gift
+        self.links = {}         # unit id -> linked unit id (or None) after this turn's link / unlink orders
 
 
 def is_int(value):
@@ -100,6 +101,15 @@ def own_army(state, player, army_id):
     """The army if it exists and belongs to player."""
     army = state.armies.get(army_id)
     return army if army and army["owner"] == player else None
+
+
+def limit_errors(state, player, pending, count, cost):
+    """Recruit limit (divisions and ships together) and gold."""
+    limit = state.rules["recruit_limit_per_province"] * state.players[player]["provinces_at_turn_start"]
+    fresh = sum(a["fresh"] for a in state.armies.values() if a["owner"] == player)
+    if fresh + pending.recruited + count > limit:
+        return ["Rekrutierungslimit überschritten."]
+    return gold_errors(state, player, pending, cost)
 
 
 def own_city(state, player, field):
@@ -186,11 +196,7 @@ class Recruit(Order):
             return ["Feld ist vom Feind besetzt."]
         if not own_city(state, player, field):
             return ["Rekrutieren geht nur in eigenen Städten."]
-        limit = state.rules["recruit_limit_per_province"] * state.players[player]["provinces_at_turn_start"]
-        fresh = sum(a["fresh"] for a in state.armies.values() if a["owner"] == player)
-        if fresh + pending.recruited + count > limit:
-            return ["Rekrutierungslimit überschritten."]
-        return gold_errors(state, player, pending, count * state.rules["division_cost"])
+        return limit_errors(state, player, pending, count, count * state.rules["division_cost"])
 
     def reserve(self, state, pending):
         pending.spent += self.data["count"] * state.rules["division_cost"]
@@ -212,6 +218,45 @@ class Recruit(Order):
 
 
 @register
+class BuildShip(Order):
+    type = "build_ship"
+    phase = "recruitment"
+    fields = {"field": "field", "count": "int"}
+
+    def validate(self, state, player, pending):
+        errors = self.shape_errors()
+        if errors:
+            return errors
+        field, count = self.data["field"], self.data["count"]
+        if count <= 0:
+            return ["Anzahl muss positiv sein."]
+        if not state.next_to_own_port(field, player):
+            return ["Schiffe werden auf einem Seefeld neben einem eigenen Hafen gebaut."]
+        if state.enemy_units_at(field, player):
+            return ["Feld ist vom Feind besetzt."]
+        return limit_errors(state, player, pending, count, count * state.rules["ship_cost"])
+
+    def reserve(self, state, pending):
+        pending.spent += self.data["count"] * state.rules["ship_cost"]
+        pending.recruited += self.data["count"]
+
+    def apply(self, state, player, events):
+        field, count = self.data["field"], self.data["count"]
+        unit = state.rules["sea_unit"]
+        state.players[player]["gold"] -= count * state.rules["ship_cost"]
+        fleet = state.own_army_at(field, player, unit)
+        if fleet:
+            fleet["divisions"] += count
+            fleet["fresh"] += count
+        else:
+            fleet = state.new_army(player, field, count, fresh=count, unit=unit)
+        events.append(make_event("build_ship", player,
+                                 f"{state.nation_name(player)} baut {plural(count, 'Schiff', 'Schiffe')} "
+                                 f"bei {state.place_name(field)}.",
+                                 field=list(field), count=count, army=fleet["id"]))
+
+
+@register
 class Disband(Order):
     type = "disband"
     phase = "recruitment"
@@ -226,17 +271,22 @@ class Disband(Order):
             return ["Armee gehört dir nicht."]
         if not 0 < self.data["count"] <= army["divisions"]:
             return ["Ungültige Divisionenzahl."]
-        if not own_city(state, player, army["field"]):
+        if state.is_fleet(army):
+            if not state.next_to_own_port(army["field"], player):
+                return ["Schiffe werden nur neben einem eigenen Hafen abgerüstet."]
+        elif not own_city(state, player, army["field"]):
             return ["Abrüsten geht nur in eigenen Städten."]
         return []
 
     def apply(self, state, player, events):
         army, count = state.armies[self.data["army"]], self.data["count"]
         field = list(army["field"])
-        state.players[player]["gold"] += count * state.rules["disband_refund"]
+        fleet = state.is_fleet(army)
+        state.players[player]["gold"] += count * state.rules["ship_disband_refund" if fleet else "disband_refund"]
         state.lose_divisions(army, count)
+        what = plural(count, "Schiff", "Schiffe") if fleet else plural(count, "Division", "Divisionen")
         events.append(make_event("disband", player,
-                                 f"{state.nation_name(player)} löst {plural(count, 'Division', 'Divisionen')} "
+                                 f"{state.nation_name(player)} löst {what} "
                                  f"bei {state.place_name(field)} auf.",
                                  army=army["id"], field=field, count=count))
 
@@ -256,8 +306,11 @@ class ForcedMarch(Order):
         errors = self.shape_errors()
         if errors:
             return errors
-        if not own_army(state, player, self.data["army"]):
+        army = own_army(state, player, self.data["army"])
+        if not army:
             return ["Armee gehört dir nicht."]
+        if state.is_fleet(army):
+            return ["Flotten haben keinen Gewaltmarsch."]
         return []
 
     def apply(self, state, player, events):
@@ -275,22 +328,74 @@ def range_of(state, army, forced=None):
     return state.rules["forced_march_range" if on else "move_range"]
 
 
-def path_errors(state, army, path, pending):
-    """Adjacency and terrain of a path for this army. The range limits the path only when standing
-    marches are off; otherwise only this turn's part is executed and the rest becomes a route (G58)."""
+def turn_range(state, army, forced=None, group=False):
+    """Fields per turn for this unit where it stands: fleet, linked pair, transport at sea, or army on land."""
+    rules = state.rules
+    if group:
+        return rules["fleet_linked_move_range"]
+    if state.is_fleet(army):
+        return rules["fleet_move_range"]
+    if state.at_sea(army):
+        return rules["transport_move_range"]
+    return range_of(state, army, forced)
+
+
+def this_turn(state, army, path, forced=None, group=False):
+    """Number of path steps done this turn: the range, and putting to sea or landing ends the move (G34)."""
+    count = 0
+    here = state.terrain_at(army["field"])
+    for step in path[:turn_range(state, army, forced, group)]:
+        count += 1
+        if state.terrain_at(step) != here:
+            break
+    return count
+
+
+def link_partner(state, army, pending=None):
+    """The linked unit, as it will be after this turn's link / unlink orders (pending) or now."""
+    if pending is not None and army["id"] in pending.links:
+        return state.armies.get(pending.links[army["id"]])
+    return state.partner(army)
+
+
+def moves_as_group(state, army, path, partner):
+    """A linked fleet and army move together; only an army that lands moves alone (and ends the link)."""
+    if not partner or not path:
+        return False
+    return state.is_fleet(army) or state.terrain_at(path[0]) == "sea"
+
+
+def path_errors(state, army, path, pending, group=False):
+    """Adjacency and terrain of a path for this unit. The range limits the path only when standing
+    marches are off; otherwise only this turn's part is executed and the rest becomes a route (G58).
+    Armies put to sea only from an own port (RULES.md 10.2); fleets and linked pairs stay at sea."""
     on = pending.toggles.get(army["id"], army["forced_march"])
     if not path:
         return ["Pfad ist leer."]
-    if len(path) > range_of(state, army, on) and not state.rules.get("standing_marches"):
+    if this_turn(state, army, path, on, group) < len(path) and not state.rules.get("standing_marches"):
         return ["Reichweite überschritten."]
-    terrain = state.unit_type(army)["terrain"]
+    sea_only = group or state.is_fleet(army)
     current = army["field"]
     for step in path:
         if not is_adjacent(current, step):
             return ["Pfad ist nicht zusammenhängend."]
-        if state.terrain_at(step) != terrain:
+        terrain = state.terrain_at(step)
+        if terrain is None or (sea_only and terrain != "sea"):
             return ["Feld ist nicht begehbar."]
+        if terrain == "sea" and state.terrain_at(current) == "land" and not state.is_own_port(current, army["owner"]):
+            return ["Ablegen geht nur von einem eigenen Hafen."]
         current = step
+    return []
+
+
+def group_errors(state, army, partner, pending=None, count=None):
+    """A linked pair moves only as a whole and only without units built this turn."""
+    moved = pending.moved if pending else {}
+    if count is not None and count < army["divisions"]:
+        return ["Verbundene Einheiten ziehen nur vollständig – erst trennen."]
+    for unit in (army, partner):
+        if state.movable(unit) < unit["divisions"] or moved.get(unit["id"]):
+            return ["Verbundene Einheiten ziehen nur vollständig – erst trennen."]
     return []
 
 
@@ -319,11 +424,21 @@ class Move(Order):
             return ["Alle Divisionen der Armee haben schon einen Zugbefehl."]
         if self.data["count"] > left:
             return [f"Nur noch {plural(left, 'Division kann', 'Divisionen können')} ziehen."]
-        return path_errors(state, army, self.data["path"], pending)
+        partner = link_partner(state, army, pending)
+        group = moves_as_group(state, army, self.data["path"], partner)
+        if group:
+            errors = group_errors(state, army, partner, pending, self.data["count"])
+            if errors:
+                return errors
+        return path_errors(state, army, self.data["path"], pending, group)
 
     def reserve(self, state, pending):
         army_id = self.data["army"]
         pending.moved[army_id] = pending.moved.get(army_id, 0) + self.data["count"]
+        army = state.armies[army_id]
+        partner = link_partner(state, army, pending)
+        if moves_as_group(state, army, self.data["path"], partner):
+            pending.moved[partner["id"]] = partner["divisions"]
 
     def resolution_errors(self, state, player):
         """Fewer divisions than ordered is fine: all remaining (movable) ones move."""
@@ -332,16 +447,28 @@ class Move(Order):
             return ["Armee existiert nicht mehr."]
         if state.movable(army) <= 0:
             return ["Neu rekrutierte Divisionen können nicht ziehen."]
-        return path_errors(state, army, self.data["path"], Pending())
+        partner = state.partner(army)
+        group = moves_as_group(state, army, self.data["path"], partner)
+        if group:
+            errors = group_errors(state, army, partner)
+            if errors:
+                return errors
+        return path_errors(state, army, self.data["path"], Pending(), group)
 
     def apply(self, state, player, events):
         from .phases.movement import execute_move  # late import: movement uses this module
         army = state.armies[self.data["army"]]
-        count = min(self.data["count"], state.movable(army))
         path = self.data["path"]
-        army.pop("route", None)  # a new move order replaces a standing route
-        here = range_of(state, army)
-        execute_move(state, army, count, path[:here], events, rest=path[here:], goal=path[-1])
+        partner = state.partner(army)
+        group = moves_as_group(state, army, path, partner)
+        if partner and not group:
+            state.unlink(army)   # the army lands: the link ends
+        count = army["divisions"] if group else min(self.data["count"], state.movable(army))
+        for unit in (army, partner if group else None):
+            if unit:
+                unit.pop("route", None)  # a new move order replaces a standing route
+        here = this_turn(state, army, path, group=group)
+        execute_move(state, army, count, path[:here], events, rest=path[here:], group=group)
 
 
 class AutoMove(Order):
@@ -357,7 +484,10 @@ class AutoMove(Order):
         army = own_army(state, player, self.data["army"])
         if not army or not army.get("route") or state.movable(army) <= 0:
             return []
-        errors = path_errors(state, army, army["route"], Pending())
+        partner = state.partner(army)
+        group = moves_as_group(state, army, army["route"], partner)
+        errors = (group_errors(state, army, partner) if group else []) or \
+            path_errors(state, army, army["route"], Pending(), group)
         if errors:
             army.pop("route")
         return errors
@@ -368,9 +498,13 @@ class AutoMove(Order):
         if not army or not army.get("route") or state.movable(army) <= 0:
             return
         route = army.pop("route")   # fresh divisions stay behind; the route goes with the moving part
-        here = range_of(state, army)
-        execute_move(state, army, state.movable(army), route[:here], events, rest=route[here:],
-                     goal=route[-1], auto=True)
+        partner = state.partner(army)
+        group = moves_as_group(state, army, route, partner)
+        if partner and not group:
+            state.unlink(army)
+        here = this_turn(state, army, route, group=group)
+        count = army["divisions"] if group else state.movable(army)
+        execute_move(state, army, count, route[:here], events, rest=route[here:], auto=True, group=group)
 
 
 @register
@@ -397,6 +531,80 @@ class Halt(Order):
         events.append(make_event("halt", player,
                                  f"{state.nation_name(player)}: Armee {army['id']} hält an und beendet den Marsch.",
                                  army=army["id"]))
+
+
+@register
+class Link(Order):
+    type = "link"
+    phase = "movement"
+    priority = 0
+    fields = {"fleet": "str", "army": "str"}
+
+    def units(self, state, player):
+        return own_army(state, player, self.data["fleet"]), own_army(state, player, self.data["army"])
+
+    def prepare(self, state, player, pending):
+        fleet, army = self.units(state, player) if not self.shape_errors() else (None, None)
+        if fleet and army:
+            for unit in (fleet, army):
+                old = link_partner(state, unit, pending)
+                if old:
+                    pending.links[old["id"]] = None
+            pending.links[fleet["id"]], pending.links[army["id"]] = army["id"], fleet["id"]
+
+    def validate(self, state, player, pending):
+        errors = self.shape_errors()
+        if errors:
+            return errors
+        fleet, army = self.units(state, player)
+        if not fleet or not army:
+            return ["Einheit gehört dir nicht."]
+        if not state.is_fleet(fleet) or state.is_fleet(army):
+            return ["Verbinden geht nur zwischen einer Flotte und einer Armee."]
+        if fleet["field"] != army["field"] or not state.at_sea(fleet):
+            return ["Flotte und Armee müssen auf demselben Seefeld stehen."]
+        return []
+
+    def apply(self, state, player, events):
+        fleet, army = self.units(state, player)
+        state.link(fleet, army)
+        events.append(make_event("link", player,
+                                 f"{state.nation_name(player)}: Flotte {fleet['id']} und Armee {army['id']} "
+                                 f"bei {state.place_name(fleet['field'])} verbunden.",
+                                 fleet=fleet["id"], army=army["id"], field=list(fleet["field"])))
+
+
+@register
+class Unlink(Order):
+    type = "unlink"
+    phase = "movement"
+    priority = 0
+    fields = {"army": "str"}
+
+    def prepare(self, state, player, pending):
+        unit = own_army(state, player, self.data["army"]) if not self.shape_errors() else None
+        partner = unit and link_partner(state, unit, pending)
+        if partner:
+            pending.links[unit["id"]] = pending.links[partner["id"]] = None
+
+    def validate(self, state, player, pending):
+        errors = self.shape_errors()
+        if errors:
+            return errors
+        unit = own_army(state, player, self.data["army"])
+        if not unit:
+            return ["Einheit gehört dir nicht."]
+        if not state.partner(unit):
+            return ["Einheit ist nicht verbunden."]
+        return []
+
+    def apply(self, state, player, events):
+        unit = state.armies[self.data["army"]]
+        other = state.partner(unit)
+        state.unlink(unit)
+        events.append(make_event("unlink", player,
+                                 f"{state.nation_name(player)}: Verbindung bei {state.place_name(unit['field'])} gelöst.",
+                                 army=unit["id"], other=other["id"], field=list(unit["field"])))
 
 
 def parse_order(data):

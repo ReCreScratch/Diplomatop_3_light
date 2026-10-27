@@ -12,11 +12,13 @@ def income_of(state, player):
 
 
 def upkeep_of(state, player):
-    """Upkeep for the player's armies, rounded (or not) on the nation total."""
+    """Upkeep for the player's divisions, armies and ships, rounded (or not) on the nation total."""
     rules = state.rules
-    armies = [a for a in state.armies.values() if a["owner"] == player]
+    units = [a for a in state.armies.values() if a["owner"] == player]
+    armies = [a for a in units if not state.is_fleet(a)]
+    ships = sum(a["divisions"] for a in units if state.is_fleet(a))
     total = (exact(rules["upkeep_per_division"]) * sum(a["divisions"] for a in armies)
-             + exact(rules["upkeep_per_army"]) * len(armies))
+             + exact(rules["upkeep_per_army"]) * len(armies) + exact(rules["upkeep_per_ship"]) * ships)
     return as_number(round_by(rules["upkeep_rounding"], total))
 
 

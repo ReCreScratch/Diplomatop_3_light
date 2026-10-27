@@ -16,60 +16,44 @@
   "A1": {
    "name": "Nordaland",
    "capital_name": "Nordalandstadt",
-   "capital": [
-    0,
-    2
-   ],
+   "capital": [0, 2],
    "income": 3,
-   "owner": "AA"
+   "owner": "AA",
+   "ports": [[0, 3]]
   },
   "A2": {
    "name": "Südaland",
    "capital_name": "Südalandstadt",
-   "capital": [
-    2,
-    2
-   ],
+   "capital": [2, 2],
    "income": 1,
    "owner": "AA"
   },
   "N1": {
    "name": "Niemandsland",
    "capital_name": "Niemandslandstadt",
-   "capital": [
-    3,
-    2
-   ],
+   "capital": [3, 2],
    "income": 2,
    "owner": null
   },
   "B1": {
    "name": "Ostbland",
    "capital_name": "Ostblandstadt",
-   "capital": [
-    4,
-    2
-   ],
+   "capital": [4, 2],
    "income": 2,
-   "owner": "BB"
+   "owner": "BB",
+   "ports": [[4, 3]]
   },
   "B2": {
    "name": "Westbland",
    "capital_name": "Westblandstadt",
-   "capital": [
-    5,
-    2
-   ],
+   "capital": [5, 2],
    "income": 1,
    "owner": "BB"
   },
   "C1": {
    "name": "Cland",
    "capital_name": "Clandstadt",
-   "capital": [
-    6,
-    2
-   ],
+   "capital": [6, 2],
    "income": 2,
    "owner": "CC"
   }

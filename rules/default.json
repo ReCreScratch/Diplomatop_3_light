@@ -25,11 +25,17 @@
   "victory_share_single": 0.4,
   "victory_share_alliance": 0.55,
   "transport_combat_value": 0.25,
+  "transport_move_range": 1,
   "fleet_move_range": 3,
-  "fleet_forced_march_range": 4,
+  "fleet_linked_move_range": 1,
+  "ship_cost": 5,
+  "upkeep_per_ship": 0.25,
+  "ship_disband_refund": 2,
   "phases": ["recruitment", "gold", "movement"],
   "land_unit": "division",
+  "sea_unit": "ship",
   "unit_types": {
-    "division": {"terrain": "land", "combat_value": 1, "hp": 1}
+    "division": {"terrain": "land", "combat_value": 1, "hp": 1},
+    "ship": {"terrain": "sea", "combat_value": 4, "hp": 4}
   }
 }

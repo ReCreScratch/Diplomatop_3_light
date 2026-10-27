@@ -37,13 +37,16 @@ GameState.to_dict() / GameState.from_dict(d)                    # JSON-safe, rou
   "map": {"...the loaded map dict (name, grid, nations, provinces)..."},
   "players": {"GB": {"name": "Felix", "gold": 20, "provinces_at_turn_start": 9}},
   "owners": {"GB1": "GB", "GB2": "GB", "XX3": null},
-  "armies": {"a1": {"id": "a1", "owner": "GB", "field": [16, 3], "divisions": 5, "fresh": 0, "forced_march": false}},
+  "armies": {"a1": {"id": "a1", "owner": "GB", "field": [16, 3], "divisions": 5, "fresh": 0, "forced_march": false, "unit": "division"},
+             "a2": {"id": "a2", "owner": "GB", "field": [15, 5], "divisions": 2, "fresh": 0, "forced_march": false, "unit": "ship", "linked": "a3"}},
   "next_army_id": 2,
   "player_order": ["FR", "GB"], "prev_player_order": [],
   "gifts": [{"province": "GB3", "from": "GB", "to": "FR", "turn": 4}]
 }
 ```
 `fresh` = divisions recruited this turn (cannot move unless `recruits_can_move_same_turn`); reset to 0 at turn start.
+`unit` = key of `rules.unit_types` (`division`, `ship`); a unit of ships is a fleet and `divisions` counts its ships.
+`linked` = id of the linked fleet / army (both carry it). `route` = standing march (owner only).
 
 ## 4. Orders (dicts, `type` is the registry key)
 | type | fields | phase |
@@ -55,9 +58,14 @@ GameState.to_dict() / GameState.from_dict(d)                    # JSON-safe, rou
 | `forced_march` | `army`, `on` (bool) | movement (all toggles first, then moves) |
 | `halt` | `army` | movement (with the toggles, before moves): deletes the army's standing route |
 | `move` | `army`, `count`, `path` (list of fields, start field excluded) | movement |
+| `build_ship` | `field` (sea field next to an own port), `count` | recruitment |
+| `link` | `fleet`, `army` (same sea field) | movement (with the toggles, before moves) |
+| `unlink` | `army` (either unit of the pair) | movement (with the toggles, before moves) |
 
 Rule details beyond RULES.md (*[default]*):
-- `recruit` on an own capital joins the own army there or creates a new army; on any field with an own army it joins it.
+- `recruit` on an own capital joins the own army there or creates a new army. `build_ship` likewise joins the own fleet.
+- A `move` of a linked unit moves both whole units (`count` must be all), unless an army lands: then it moves alone and
+  the link ends. Events: `move` gets `with` (partner id); `fight` gets `losses` = {unit id: lost divisions/ships}.
 - `move` with `count` < movable divisions splits; the moving part is a new army that inherits forced march.
   Merging at the end of a move: the army already standing there keeps its id and its forced-march flag.
 - Path: adjacent passable fields (forced march state *after* this turn's toggle orders of the same army). With

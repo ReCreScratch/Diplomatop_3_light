@@ -111,7 +111,7 @@ function renderBoard() {
   const G = ctx.G, old = $('b-amt'), keep = old ? { v: old.value, focus: document.activeElement === old } : null;
   if (sendTo && !G.players[sendTo]) sendTo = null;
   const maxSend = O.budget().canSend;
-  let h = '<tr><th>Spieler</th><th>Prov.</th><th title="Anteil an allen Landfeldern">% Land</th><th>Eink.</th><th>Unterh.</th><th>Arm.</th><th>Div.</th></tr>';
+  let h = '<tr><th>Spieler</th><th>Prov.</th><th title="Anteil an allen Landfeldern">% Land</th><th>Eink.</th><th>Unterh.</th><th>Arm.</th><th>Div.</th><th title="Schiffe">Sch.</th></tr>';
   for (const r of G.board || []) {
     const pend = O.book.list.map((o, i) => [o, i]).filter(([o]) => (o.type === 'send_gold' || o.type === 'give_province') && o.to === r.player)
       .map(([o, i]) => {
@@ -122,7 +122,7 @@ function renderBoard() {
       ? '<span class="pend bad">Kein Gold übrig</span>'
       : `<span class="sendform">Gold senden: <input id="b-amt" type="number" min="1" max="${maxSend}" value="1"> <button data-send="1">OK</button> <small>max. ${maxSend}</small></span>`;
     h += `<tr data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}"><td><span class="sw" style="background:${R.colorOf(r.player)}"></span><b>${esc(r.name)}</b> <small>${esc(nName(r.player))}</small>${r.player !== G.me ? ` <button class="gold-btn" data-gold="${r.player}" title="Gold senden">Gold</button>` : ''}${pend}${form}</td>` +
-      `<td>${r.provinces}</td><td>${Math.round(r.share * 100)}</td><td>${r.income}</td><td>${r.upkeep}</td><td>${r.armies}</td><td>${r.divisions}</td></tr>`;
+      `<td>${r.provinces}</td><td>${Math.round(r.share * 100)}</td><td>${r.income}</td><td>${r.upkeep}</td><td>${r.armies}</td><td>${r.divisions}</td><td>${r.ships || 0}</td></tr>`;
   }
   $('board').innerHTML = h;
   const nw = $('b-amt');

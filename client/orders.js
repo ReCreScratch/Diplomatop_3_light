@@ -1,7 +1,7 @@
 // Own order list: budget, validation helpers, undo stack and saving. The server stays the judge:
 // after every PUT an order that just got an error is taken out again and the German text is shown.
 import { api } from './api.js';
-import { ctx, rules, P, tokenAt, movable, pName } from './ctx.js';
+import { ctx, rules, P, tokenAt, movable, pName, isFleet, isSea } from './ctx.js';
 
 export const book = { list: [], errors: [] };
 let undo = [], inflight = 0, seq = 0, check = null;
@@ -14,20 +14,47 @@ export function newTurn() { undo = []; check = null; }
 // ---------- derived numbers (everything from state.rules / my_gold / my_recruit_limit) ----------
 export function budget() {
   const r = rules(), G = ctx.G, debt = r.allow_spending_into_debt;
-  let recruits = 0, sent = 0;
-  for (const o of book.list) { if (o.type === 'recruit') recruits += o.count; else if (o.type === 'send_gold') sent += o.amount; }
-  const gold = G.my_gold - recruits * r.division_cost - sent, limit = G.my_recruit_limit ?? 0;
-  const recLeft = Math.max(0, limit - recruits);
+  let recruits = 0, ships = 0, sent = 0;
+  for (const o of book.list) {
+    if (o.type === 'recruit') recruits += o.count; else if (o.type === 'build_ship') ships += o.count; else if (o.type === 'send_gold') sent += o.amount;
+  }
+  const gold = G.my_gold - recruits * r.division_cost - ships * r.ship_cost - sent, limit = G.my_recruit_limit ?? 0;
+  const recLeft = Math.max(0, limit - recruits - ships);   // divisions and ships share the limit
   return {
-    gold, recruits, limit, recLeft,
+    gold, recruits: recruits + ships, limit, recLeft,
     canRecruit: Math.min(recLeft, debt ? Infinity : Math.floor(Math.max(0, gold) / r.division_cost)),
+    canBuild: Math.min(recLeft, debt ? Infinity : Math.floor(Math.max(0, gold) / r.ship_cost)),
     canSend: debt ? Infinity : Math.floor(Math.max(0, gold)),
   };
 }
 const sum = (type, army, f = 'count') => book.list.reduce((s, o) => s + (o.type === type && o.army === army ? o[f] : 0), 0);
 export const moveOf = id => book.list.find(o => o.type === 'move' && o.army === id);
 export const fmOn = a => { let on = a.forced_march; for (const o of book.list) if (o.type === 'forced_march' && o.army === a.id) on = o.on; return on; };
-export const rangeOf = a => fmOn(a) ? rules().forced_march_range : rules().move_range;
+// linked partner after this turn's link / unlink orders
+export function partnerOf(a) {
+  let id = a.linked || null;
+  for (const o of book.list) {
+    if (o.type === 'link') { if (o.fleet === a.id) id = o.army; else if (o.army === a.id) id = o.fleet; else if (id === o.fleet || id === o.army) id = null; }
+    if (o.type === 'unlink' && (o.army === a.id || o.army === id)) id = null;
+  }
+  return id ? ctx.G.armies[id] || null : null;
+}
+// a linked pair moves together; only an army that lands moves alone (engine: moves_as_group)
+export const groupMove = (a, path) => !!partnerOf(a) && (isFleet(a) || (path && path.length > 0 && isSea(path[0])));
+// fields per turn where the unit stands (engine: turn_range)
+export function rangeOf(a, group = false) {
+  const r = rules();
+  if (group) return r.fleet_linked_move_range;
+  if (isFleet(a)) return r.fleet_move_range;
+  if (isSea(a.field)) return r.transport_move_range;
+  return fmOn(a) ? r.forced_march_range : r.move_range;
+}
+// path steps done this turn: range, and putting to sea or landing ends the move (engine: this_turn)
+export function thisTurn(a, path) {
+  const sea = isSea(a.field), n = Math.min(path.length, rangeOf(a, groupMove(a, path)));
+  for (let i = 0; i < n; i++) if (isSea(path[i]) !== sea) return i + 1;
+  return n;
+}
 // several moves may split one army (G56); together they use at most its movable divisions
 export const movableLeft = a => Math.max(0, movable(a) - sum('disband', a.id) - sum('move', a.id));
 export const disbandMax = a => Math.max(0, a.divisions - sum('disband', a.id) - sum('move', a.id));
@@ -49,7 +76,7 @@ export function add(o) {
   const merge = (type, same) => L.find(x => x.type === type && same(x));
   commit(() => {
     const m = o.type === 'move' ? merge('move', x => x.army === o.army && JSON.stringify(x.path) === JSON.stringify(o.path))
-      : o.type === 'recruit' ? merge('recruit', x => x.field[0] === o.field[0] && x.field[1] === o.field[1])
+      : o.type === 'recruit' || o.type === 'build_ship' ? merge(o.type, x => x.field[0] === o.field[0] && x.field[1] === o.field[1])
       : o.type === 'disband' ? merge('disband', x => x.army === o.army)
       : o.type === 'send_gold' ? merge('send_gold', x => x.to === o.to) : null;
     if (m) { if (o.type === 'send_gold') m.amount += o.amount; else m.count += o.count; return m; }
@@ -97,9 +124,16 @@ async function save() {
 // ---------- German one-liner per order (order list) ----------
 export function describe(o) {
   const army = o.army && ctx.G.armies[o.army];
-  const pn = f => { const p = P()[tokenAt(f)]; return p ? p.name : 'Feld'; };
+  const pn = f => { const p = P()[tokenAt(f)]; return p ? p.name : isSea(f) ? 'Meer' : 'Feld'; };
   switch (o.type) {
-    case 'move': return army ? `Zug: ${o.count} Div. von ${pn(army.field)} nach ${pn(o.path[o.path.length - 1] || army.field)}${o.path.length > rangeOf(army) ? ` (${Math.ceil(o.path.length / rangeOf(army))} Runden)` : ''}` : 'Zug';
+    case 'move': {
+      if (!army) return 'Zug';
+      const r = rangeOf(army, groupMove(army, o.path)), what = isFleet(army) ? 'Schiffe' : 'Div.';
+      return `Zug: ${o.count} ${what} von ${pn(army.field)} nach ${pn(o.path[o.path.length - 1] || army.field)}${o.path.length > r ? ` (ca. ${Math.ceil(o.path.length / r)} Runden)` : ''}`;
+    }
+    case 'build_ship': return `Schiffe bauen: +${o.count} bei ${pn(o.field)}`;
+    case 'link': return `Flotte und Armee bei ${army ? pn(army.field) : pn((ctx.G.armies[o.fleet] || {}).field || [0, 0])} verbinden`;
+    case 'unlink': return `Verbindung bei ${army ? pn(army.field) : o.army} lösen`;
     case 'halt': return `Halt: Armee in ${army ? pn(army.field) : o.army} bleibt stehen`;
     case 'recruit': return `Rekrutieren: +${o.count} in ${pn(o.field)}`;
     case 'disband': return `Abrüsten: −${o.count} in ${army ? pn(army.field) : o.army}`;

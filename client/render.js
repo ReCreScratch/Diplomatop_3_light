@@ -130,6 +130,10 @@ function buildBase(state) {
     }
   }));
   border.setAttribute('d', d); L.base.appendChild(border);
+  for (const p of Object.values(P)) for (const f of p.ports || []) {   // ports: a small anchor at the field's sea-side edge
+    const { x, y } = centre(f), t = txt(L.base, x + S * 0.5, y + S * 0.45, theme.port_icon || '⚓', 'port');
+    const ti = mk('title', {}, t); ti.textContent = 'Hafen von ' + p.name;
+  }
   for (const p of Object.values(P)) {
     const { x, y } = centre(p.capital);
     let t;
@@ -148,7 +152,7 @@ export function drawMap(state) {
   theme = state.theme || {};
   svg.style.background = theme.background || '#000';
   if (mapKey !== state.map.name) { mapKey = state.map.name; buildBase(state); }
-  curMap = state.map;
+  curMap = state.map; curRules = state.rules || curRules;
   paintOwners(state.owners);
   drawArmies(Object.values(state.armies));
 }
@@ -161,25 +165,37 @@ function paintOwners(owners) {
 function drawArmies(list) {
   clear(L.armies);
   const caps = new Set(Object.values(curMap.provinces).map(p => p.capital.join()));
-  list.forEach(a => armyToken(a, caps));
+  list.forEach(a => armyToken(a, caps, list));
 }
-// One army shield in L.armies (returns its <g>); also used by the replay block at the end of this file.
-function armyToken(a, caps) {
+// Unit types are data: a unit whose type has terrain 'sea' is a fleet.
+const isFleet = a => ((curRules.unit_types || {})[a.unit || curRules.land_unit] || {}).terrain === 'sea';
+let curRules = {};
+// Shield offset: a fleet and an army sharing a sea field sit side by side.
+const shareOffset = (a, list) => {
+  const k = a.field.join(), mates = (list || []).filter(b => b.field.join() === k);
+  return mates.length < 2 ? 0 : (isFleet(a) ? -S * 0.55 : S * 0.55);
+};
+// One unit shield in L.armies (returns its <g>); also used by the replay block at the end of this file.
+function armyToken(a, caps, list) {
   const capSet = caps || new Set(Object.values(curMap.provinces).map(p => p.capital.join()));
   {
-    const { x, y } = centre(a.field), yy = y + (capSet.has(a.field.join()) ? S * 0.35 : 0);
+    const c = centre(a.field), x = c.x + shareOffset(a, list), y = c.y, yy = y + (capSet.has(a.field.join()) ? S * 0.35 : 0);
     const fresh = a.fresh || 0, label = String(a.divisions - fresh) + (fresh ? '+' + fresh : '');
     // light parchment shield with a band in the owner's colour, so it stands out on its own land
     const w = Math.max(24, label.length * 9 + 12), l = x - w / 2, r = x + w / 2, t0 = yy - 13;
     const sh = `M${l} ${t0}H${r}V${yy + 3}Q${r} ${yy + 9} ${x} ${yy + 13}Q${l} ${yy + 9} ${l} ${yy + 3}Z`;
-    const g = mk('g', { class: 'army' + (fresh ? ' has-fresh' : ''), 'data-army': a.id }, L.armies);
-    mk('path', { d: sh, class: 'badge-rim' }, g);
-    mk('path', { d: sh, class: 'badge' }, g);
+    const fleet = isFleet(a);
+    const g = mk('g', { class: 'army' + (fleet ? ' fleet' : '') + (fresh ? ' has-fresh' : ''), 'data-army': a.id }, L.armies);
+    // fleets: a hull-shaped badge instead of the shield
+    const hull = `M${l - 3} ${t0 + 4}H${r + 3}L${r - 3} ${yy + 10}H${l + 3}Z`;
+    mk('path', { d: fleet ? hull : sh, class: 'badge-rim' }, g);
+    mk('path', { d: fleet ? hull : sh, class: 'badge' }, g);
     mk('rect', { x: l, y: t0, width: w, height: 6, fill: colorOf(a.owner), class: 'badge-chief' }, g);
     const t = txt(g, x, yy + 2, '', 'divs');
     const s1 = mk('tspan', {}, t); s1.textContent = String(a.divisions - fresh);
     if (fresh) { const s2 = mk('tspan', { class: 'fresh' }, t); s2.textContent = '+' + fresh; }
-    if (a.forced_march) {
+    if (a.linked) txt(g, r + 2, t0 + 2, '⛓', 'linkflag');
+    if (a.forced_march && !fleet && !(rows[a.field[1]] && rows[a.field[1]][a.field[0]] === '~~')) {
       mk('circle', { cx: l - 1, cy: t0 + 3, r: 6, class: 'fmseal' }, g);
       txt(g, l - 1, t0 + 3, '»', 'fmflag');
     }
@@ -209,9 +225,12 @@ export function showArrows(orders, errors, state) {
       mk('polyline', { points: ps, class: 'ord-move' + (errs.length ? ' err' : ''), 'data-ord': i, 'marker-end': `url(#ah${errs.length ? 'e' : ''})` }, L.orders);
       const a = pts[0], b = pts[1] || pts[0];
       marker(i, (a.x + b.x) / 2, (a.y + b.y) / 2, String(++seq), errs, `Zug ${seq}: ${o.count} Div.`);
-    } else if (o.type === 'recruit') {
+    } else if (o.type === 'recruit' || o.type === 'build_ship') {
       const c = centre(o.field), p = slot('r' + o.field, c.x + 9, c.y - 11);
-      marker(i, p.x, p.y, '+' + o.count, errs, 'Rekrutieren');
+      marker(i, p.x, p.y, '+' + o.count, errs, o.type === 'recruit' ? 'Rekrutieren' : 'Schiffe bauen');
+    } else if ((o.type === 'link' || o.type === 'unlink') && state.armies[o.fleet || o.army]) {
+      const c = centre(state.armies[o.fleet || o.army].field);
+      marker(i, c.x, c.y + 15, o.type === 'link' ? '⛓' : '⛓×', errs, o.type === 'link' ? 'Verbinden' : 'Trennen');
     } else if (o.type === 'disband' && army) {
       const c = centre(army.field), p = slot('d' + army.field, c.x + 9, c.y + 11);
       marker(i, p.x, p.y, '−' + o.count, errs, 'Abrüsten');
