@@ -20,7 +20,7 @@
   <label>Speichern als <input id="ed-name" maxlength="40" list="ed-names" placeholder="ordnername" autocomplete="off"></label>
   <datalist id="ed-names"></datalist>
   <button id="ed-save" class="primary" type="button">Speichern</button>
-  <a href="/">Zur Startseite</a>
+  <a class="btn ghost" href="/">Zur Startseite</a>
 </header>
 <p id="ed-msg" class="msg"></p>
 <div id="ed-newform" hidden>
@@ -28,7 +28,7 @@
   <button id="ed-new-go" type="button">Anlegen</button> <button id="ed-new-cancel" type="button">Abbrechen</button>
 </div>
 <main id="ed-body">
-  <aside id="ed-tools">
+  <aside id="ed-tools" class="panel">
     <h4>Werkzeug</h4>
     <div class="tools" id="ed-toolbtns">
       <button data-tool="select" class="on" title="Feld anklicken: Provinz auswählen">Auswählen</button>
@@ -51,7 +51,7 @@
     <p class="hint" id="ed-hover">&nbsp;</p>
   </aside>
   <div id="ed-mapwrap"><svg id="ed-map" xmlns="http://www.w3.org/2000/svg"></svg></div>
-  <aside id="ed-side">
+  <aside id="ed-side" class="panel">
     <h4>Nationen</h4>
     <div id="ed-nations"></div>
     <div class="row"><input id="ed-ncode" maxlength="3" placeholder="Kürzel" size="5"> <input id="ed-nname" maxlength="30" placeholder="Name" size="14"> <button id="ed-nadd" type="button">Hinzufügen</button></div>

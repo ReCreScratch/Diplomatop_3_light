@@ -29,7 +29,7 @@ const isField = (m, f) => m.kind === 'field' && same(m.f, f);
 export function init(h) {
   hooks = h;
   $('chat').innerHTML =
-    `<div class="chat-head"><button id="chat-toggle" type="button">💬 Diplomatie <b id="chat-total" class="cbadge" hidden></b></button></div>` +
+    `<div class="panel-head chat-head"><button id="chat-toggle" type="button">💬 Diplomatie <b id="chat-total" class="cbadge" hidden></b></button></div>` +
     `<div id="chat-body"><div id="chat-tabs"></div><div id="chat-msgs"></div>` +
     `<div id="chat-comp"><div id="chat-marks"></div>` +
     `<div class="chat-ac" id="chat-ac" hidden></div>` +

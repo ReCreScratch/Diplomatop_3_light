@@ -88,19 +88,22 @@ function renderTop() {
   $('tb-turn').textContent = 'Runde ' + G.turn;
   $('tb-order').innerHTML = G.player_order.map(p =>
     `<span class="chip${p === G.me ? ' me' : ''}${G.ready[p] ? ' rdy' : ''}" style="border-color:${R.colorOf(p)}" title="${esc(nName(p))}">${G.ready[p] ? '✓ ' : ''}${esc(pName(p))}</span>`).join('');
-  $('tb-gold').innerHTML = G.me ? `Gold <b>${G.my_gold}</b> → <b class="${b.gold < 0 ? 'bad' : ''}">${b.gold}</b>` : '';
-  $('tb-rec').innerHTML = G.me ? `Rekruten <b>${b.recruits}/${b.limit}</b>` : '';
+  $('tb-gold').innerHTML = G.me ? `<span class="lbl">Gold</span><span class="val"><b>${G.my_gold}</b> → <b class="${b.gold < 0 ? 'bad' : ''}">${b.gold}</b></span>` : '';
+  $('tb-rec').innerHTML = G.me ? `<span class="lbl">Rekruten</span><span class="val"><b>${b.recruits}/${b.limit}</b></span>` : '';
   const c = t => L.filter(o => o.type === t).length;
   const parts = [[c('move'), 'Zug', 'Züge'], [c('recruit'), 'Rekrutierung', 'Rekrutierungen'], [c('disband'), 'Abrüstung', 'Abrüstungen'],
     [c('forced_march'), 'Gewaltmarsch', 'Gewaltmärsche'], [c('halt'), 'Halt', 'Halts'], [c('send_gold') + c('give_province') + c('buy'), 'Überweisung', 'Überweisungen'],
     [c('no_attack') + c('invite') + c('accept') + c('leave') + c('offer_sale'), 'Diplomatiebefehl', 'Diplomatiebefehle']]
     .filter(p => p[0]).map(p => `${p[0]} ${p[0] === 1 ? p[1] : p[2]}`);
-  $('tb-sum').textContent = !G.me ? '' : parts.length ? parts.join(', ') : 'keine Befehle';
+  const sum = parts.length ? parts.join(', ') : 'keine';
+  $('tb-sum').innerHTML = !G.me ? '' : `<span class="lbl">Befehle</span><span class="val">${esc(sum)}</span>`;
+  $('tb-sum').title = G.me ? sum : '';
   const rd = G.ready && G.ready[G.me], btn = $('btn-ready');
-  btn.textContent = rd ? 'Bereit ✓ (zurücknehmen)' : 'Bereit'; btn.hidden = !G.me || !!G.winner;
+  btn.textContent = rd ? 'Bereit ✓' : 'Bereit'; btn.title = rd ? 'Bereit zurücknehmen' : 'Runde beenden: ich bin fertig'; btn.hidden = !G.me || !!G.winner;
   renderVictory();
   const idle = Object.values(G.armies).filter(a => ownArmyAt(a.field) && O.movableLeft(a) > 0 && !O.hasOrder(a) && !O.marching(a)).length;
-  $('tb-idle').textContent = idle && !rd ? `${idle} ${idle === 1 ? 'Armee' : 'Armeen'} ohne Befehl` : '';
+  $('tb-idle').textContent = idle && !rd ? `⚠ ${idle} ohne Befehl` : '';
+  $('tb-idle').title = idle && !rd ? `${idle} ${idle === 1 ? 'Armee' : 'Armeen'} ohne Befehl` : '';
   tickTimer();
 }
 // victory countdown (who leads, how many resolutions held) and, at the end, the winner (RULES.md 11.5)
@@ -111,7 +114,7 @@ function renderVictory() {
   el.title = `Sieg: mehr als ${Math.round(r.victory_share_single * 100)} % der Landfelder allein oder mehr als ${Math.round(r.victory_share_alliance * 100)} % im Bündnis `
     + `(Bündnis mindestens ${r.alliance_min_turns} Runden alt), ${r.victory_hold_turns} Runden in Folge gehalten.`;
   el.className = lead ? 'lead' : '';
-  el.innerHTML = G.winner ? '' : lead ? `Siegbedingung: <b>${esc(who(lead.players))}</b> ${lead.turns}/${V.need}` : '';
+  el.innerHTML = G.winner ? '' : lead ? `<span class="lbl">Siegbedingung</span><span class="val"><b>${esc(who(lead.players))}</b> ${lead.turns}/${V.need}</span>` : '';
   win.hidden = !G.winner && G.status !== 'finished';
   if (!G.winner && G.status === 'finished') win.innerHTML = 'Spiel beendet – alle Spieler haben das Spiel verlassen.';
   if (G.winner) win.innerHTML = `Spiel beendet – <b>${esc(who(G.winner.players))}</b> ${G.winner.players.length > 1 ? 'gewinnen' : 'gewinnt'} in Runde ${G.winner.turn}${G.winner.alliance ? ' (Bündnis)' : ''}.`;
@@ -129,10 +132,11 @@ function tickTimer() {
 function renderOrderList() {
   const L = O.book.list, M = marchers();
   const marches = M.map(a => `<li class="marsch" data-army="${esc(a.id)}">${esc(`Marsch: ${a.divisions - a.fresh} Div. → ${fieldName(a.route[a.route.length - 1])} (noch ~${O.roundsLeft(a)} Runden)`)} <a data-halt="${esc(a.id)}" title="Halt: Marsch beenden">✕</a></li>`).join('');
-  $('olist').innerHTML = L.length || M.length ? '<h4>Befehle</h4><ul>' + marches + L.map((o, i) => {
+  $('olist-panel').hidden = !ctx.G.me; $('olist-count').textContent = L.length + M.length || '';
+  $('olist').innerHTML = L.length || M.length ? '<ul>' + marches + L.map((o, i) => {
     const er = (O.book.errors[i] || []).join(' ');
     return `<li data-i="${i}" class="${er ? 'bad' : ''}" title="${esc(er)}">${esc(O.describe(o))}${er ? ' – ' + esc(er) : ''} <a data-del="${i}" title="Löschen">✕</a></li>`;
-  }).join('') + '</ul>' : '';
+  }).join('') + '</ul>' : '<p class="empty">Noch keine Befehle.</p>';
   R.focusOrder(null);
 }
 
@@ -142,7 +146,7 @@ function renderBoard() {
   const G = ctx.G, old = $('b-amt'), keep = old ? { v: old.value, focus: document.activeElement === old } : null;
   if (sendTo && !G.players[sendTo]) sendTo = null;
   const maxSend = O.budget().canSend;
-  let h = '<tr><th>Spieler</th><th>Prov.</th><th title="Zählender Anteil an allen Landfeldern (tatsächlicher Anteil in Klammern). Geschenkte und gekaufte Provinzen zählen erst nach einiger Zeit.">% Land</th><th>Eink.</th><th>Unterh.</th><th>Arm.</th><th>Div.</th><th title="Schiffe">Sch.</th></tr>';
+  let h = '<thead><tr><th title="Provinzen">Prov.</th><th title="Zählender Anteil an allen Landfeldern (tatsächlicher Anteil in Klammern). Geschenkte und gekaufte Provinzen zählen erst nach einiger Zeit.">% Land</th><th title="Einkommen pro Runde">Eink.</th><th title="Unterhalt pro Runde">Unt.</th><th title="Armeen">Arm.</th><th title="Divisionen">Div.</th><th title="Schiffe">Sch.</th></tr></thead>';
   for (const r of G.board || []) {
     const pend = O.book.list.map((o, i) => [o, i]).filter(([o]) => (o.type === 'send_gold' || o.type === 'give_province') && o.to === r.player)
       .map(([o, i]) => {
@@ -154,9 +158,10 @@ function renderBoard() {
       : `<span class="sendform">Gold senden: <input id="b-amt" type="number" min="1" max="${maxSend}" value="1"> <button data-send="1">OK</button> <small>max. ${maxSend}</small></span>`;
     const al = r.alliance && G.alliances && G.alliances[r.alliance];
     const badge = al ? ` <span class="ally" title="Bündnis: ${esc(al.members.map(nName).join(' + '))}">Bündnis ${esc(r.alliance.replace(/^\D+/, ''))}</span>` : '';
-    h += `<tr data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}"><td><span class="sw" style="background:${R.colorOf(r.player)}"></span><b>${esc(r.name)}</b> <small>${esc(nName(r.player))}</small>${badge}${G.me && r.player !== G.me && !r.ai ? ` <button class="gold-btn" data-gold="${r.player}" title="Gold senden">Gold</button>` : ''}${pend}${form}</td>` +
-      `<td>${r.provinces}</td><td>${pct(r.share_counted ?? r.share)} <small>(${pct(r.share)})</small></td><td>${r.income}</td><td>${r.upkeep}</td><td>${r.armies}</td><td>${r.divisions}</td><td>${r.ships || 0}</td></tr>`;
+    h += `<tbody data-p="${r.player}" class="${sendTo === r.player ? 'open' : ''}${r.player === G.me ? ' me' : ''}"><tr class="pn"><td colspan="7"><div class="pname"><span class="sw" style="background:${R.colorOf(r.player)}"></span><b title="${esc(r.name)}">${esc(r.name)}</b> <small class="pn-nat" title="${esc(nName(r.player))}">${esc(nName(r.player))}</small>${badge}${G.me && r.player !== G.me && !r.ai ? ` <button class="gold-btn" data-gold="${r.player}" title="Gold senden">Gold</button>` : ''}</div>${pend}${form}</td></tr>` +
+      `<tr class="ps"><td>${r.provinces}</td><td>${pct(r.share_counted ?? r.share)} <small>(${pct(r.share)})</small></td><td>${r.income}</td><td>${r.upkeep}</td><td>${r.armies}</td><td>${r.divisions}</td><td>${r.ships || 0}</td></tr>`;
     if (G.me && r.player !== G.me && !G.winner && !r.ai) h += dipRow(r.player);
+    h += '</tbody>';
   }
   $('board').innerHTML = h;
   const nw = $('b-amt');
@@ -189,7 +194,7 @@ function dipRow(p) {
     bits.push(`<span class="offer">Angebot: ${esc(prov)} für ${o.price} Gold ` + btn('buy', 'Kaufen', sel, poor ? 'Nicht genug Gold.' : 'Provinz zu diesem Preis kaufen (bezahlt in der Goldphase).', `data-prov="${esc(o.province)}"`, poor) + '</span>');
   }
   for (const o of (G.offers.outgoing || []).filter(o => o.to === p)) bits.push(`<small>Dein Angebot: ${esc((P()[o.province] || {}).name || o.province)} für ${o.price} Gold (nur diese Runde)</small>`);
-  return `<tr class="dip"><td colspan="8">${bits.join(' ')}</td></tr>`;
+  return `<tr class="dip"><td colspan="7"><div class="dipbits">${bits.join(' ')}</div></td></tr>`;
 }
 function onDip(el) {
   const p = el.dataset.dp, L = O.book.list, kind = el.dataset.dip;
@@ -224,7 +229,7 @@ function onBoardClick(e) {
   const d = e.target.closest('[data-del]');
   if (d) { O.removeAt(+d.dataset.del); return; }
   if (e.target.closest('.sendform')) return;
-  const tr = e.target.closest('tr[data-p]');
+  const tr = e.target.closest('tbody[data-p]');
   if (!tr || !ctx.G.me || tr.dataset.p === ctx.G.me) return;
   if (e.target.closest('[data-gold]')) { sendTo = sendTo === tr.dataset.p ? null : tr.dataset.p; renderBoard(); return; }
   Chat.openChannel(tr.dataset.p);
