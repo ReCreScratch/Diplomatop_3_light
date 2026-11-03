@@ -44,6 +44,7 @@ background:linear-gradient(#f3e6c0,#dcc68c);border:2px solid #8a6f3e;border-radi
 @keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 .linkrow{display:flex;gap:var(--sp-2)}.linkrow input{flex:1;min-width:0}
 .linkrow button.ok{border-color:#2f6b2f;color:#1f5a1f}
+.online{display:flex;flex-direction:column;gap:var(--sp-2)}.online .msg{font-size:var(--fs-sm)}.online .linkrow input{font-size:var(--fs-sm)}
 .rules{margin:0;background:#e9dab088;border:1px solid #8a6f3e;border-radius:var(--r-sm);padding:0 var(--sp-3)}
 .rules summary{display:flex;align-items:center;min-height:var(--h-md);cursor:pointer;color:var(--ink);font-size:var(--fs-xs);letter-spacing:.14em;text-transform:uppercase}
 .rules ul{margin:var(--sp-1) 0 var(--sp-3);padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:var(--sp-1) var(--sp-4);font-size:var(--fs-sm)}

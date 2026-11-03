@@ -29,6 +29,38 @@ export function lobbyScreen(env, first) {
     const b = $('lb-copy'); b.textContent = 'Kopiert ✓'; b.classList.add('ok');
     setTimeout(() => { b.textContent = 'Link kopieren'; b.classList.remove('ok'); }, 2000);
   };
+
+  // --- online link (Cloudflare Quick Tunnel): offered only on the host PC itself (the server says local) ---
+  const online = $('lb-online'), tunHint = $('lb-tun-hint'), tunBtn = $('lb-tun-btn');
+  let T = null;
+  function showTunnel() {
+    online.hidden = !T || !T.local;
+    if (online.hidden) return;
+    const running = T.running && T.url;
+    $('lb-link').value = running ? T.url + link().slice(location.origin.length) : link();
+    $('lb-tun-cmdrow').hidden = T.available;
+    tunBtn.textContent = !T.available ? 'Erneut prüfen' : running ? 'Online-Link beenden' : 'Online-Link erstellen';
+    if (!tunHint.classList.contains('err')) {
+      tunHint.textContent = !T.available ? 'cloudflared ist nicht installiert: In der Eingabeaufforderung ausführen, danach erneut prüfen.'
+        : running ? 'Link an Mitspieler schicken. Es kann ein paar Sekunden dauern, bis er erreichbar ist.' : '';
+    }
+  }
+  async function tunnelCall(fn, busy) {
+    tunBtn.disabled = true;
+    if (busy) msg('lb-tun-hint', busy);
+    try { T = await fn(); msg('lb-tun-hint', ''); } catch (e) { msg('lb-tun-hint', e.message, true); }
+    tunBtn.disabled = false; showTunnel();
+  }
+  tunBtn.onclick = () => tunnelCall(!T.available ? api.tunnel : T.running ? api.tunnelStop : api.tunnelStart, T.available && !T.running ? 'Tunnel wird gestartet …' : '');
+  $('lb-tun-cmdcopy').onclick = async () => {
+    const inp = $('lb-tun-cmd');
+    try { await navigator.clipboard.writeText(inp.value); }
+    catch (e) { inp.select(); try { document.execCommand('copy'); } catch (e2) { /* ignore */ } }
+    const b = $('lb-tun-cmdcopy'); b.textContent = 'Kopiert ✓'; b.classList.add('ok');
+    setTimeout(() => { b.textContent = 'Kopieren'; b.classList.remove('ok'); }, 2000);
+  };
+  api.tunnel().then(t => { T = t; showTunnel(); }).catch(() => { /* older server: no online link */ });
+
   let L = first, mapCtx = null, mini = null, rv = null, seenShown = null, timer = null, stopped = false;
   const isHost = () => L.is_host ?? (ls.get('dip_ishost_' + gid) === '1');
   const act = async (fn) => { try { await fn(); msg('lb-msg', ''); } catch (e) { msg('lb-msg', e.message, true); } poll(); };

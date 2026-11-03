@@ -8,12 +8,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .games import ApiError, Games
+from .tunnel import Tunnel, is_local_request
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def create_app(save_dir=None, maps_dir=None):
+def create_app(save_dir=None, maps_dir=None, tunnel=None):
     games = Games(save_dir, maps_dir)
+    tunnel = tunnel or Tunnel()
 
     async def ticker():
         while True:
@@ -25,9 +27,11 @@ def create_app(save_dir=None, maps_dir=None):
         task = asyncio.create_task(ticker())
         yield
         task.cancel()
+        tunnel.stop()   # no orphan cloudflared after the server ends
 
     app = FastAPI(lifespan=lifespan)
     app.state.games = games
+    app.state.tunnel = tunnel
 
     @app.exception_handler(ApiError)
     async def api_error(request: Request, err: ApiError):
@@ -124,6 +128,34 @@ def create_app(save_dir=None, maps_dir=None):
     @app.get("/api/games/{gid}/history")
     def history(gid: str, token: str = ""):
         return games.history(gid, token)
+
+    def local(request: Request):
+        return is_local_request(request.headers.get("host"), request.client.host if request.client else None, request.headers)
+
+    def host_only(request: Request):
+        if not local(request):
+            raise ApiError(403, "Das darf nur der Spielleiter am eigenen PC.")
+
+    @app.get("/api/tunnel")
+    def tunnel_status(request: Request):
+        if not local(request):
+            return {"local": False, "url": tunnel.status()["url"]}
+        return {**tunnel.status(), "local": True}
+
+    @app.post("/api/tunnel/start")
+    def tunnel_start(request: Request):
+        host_only(request)
+        try:
+            tunnel.start(request.url.port or 8000)
+        except RuntimeError as e:
+            raise ApiError(400, str(e))
+        return {**tunnel.status(), "local": True}
+
+    @app.post("/api/tunnel/stop")
+    def tunnel_stop(request: Request):
+        host_only(request)
+        tunnel.stop()
+        return {**tunnel.status(), "local": True}
 
     @app.get("/")
     def index():

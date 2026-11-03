@@ -38,4 +38,7 @@ export const api = {
   stats: (id, tok) => call('GET', `${g(id)}/stats${tok ? t(tok) : ''}`),
   history: (id, tok) => call('GET', `${g(id)}/history${tok ? t(tok) : ''}`),
   preview: (id, tok, body) => call('POST', `${g(id)}/preview${t(tok)}`, body),
+  tunnel: () => call('GET', '/api/tunnel'),
+  tunnelStart: () => call('POST', '/api/tunnel/start'),
+  tunnelStop: () => call('POST', '/api/tunnel/stop'),
 };

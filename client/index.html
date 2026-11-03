@@ -79,6 +79,14 @@
         <input id="lb-link" readonly aria-label="Einladungslink">
         <button id="lb-copy">Link kopieren</button>
       </div>
+      <div id="lb-online" class="online" hidden>
+        <p id="lb-tun-hint" class="msg"></p>
+        <div id="lb-tun-cmdrow" class="linkrow" hidden>
+          <input id="lb-tun-cmd" readonly value="winget install --id Cloudflare.cloudflared" aria-label="Installationsbefehl">
+          <button id="lb-tun-cmdcopy" type="button">Kopieren</button>
+        </div>
+        <button id="lb-tun-btn" type="button"></button>
+      </div>
       <details id="lb-rules" class="rules"><summary>Regeln</summary><ul id="lb-rules-list"></ul></details>
       <button id="lb-start" class="primary big" hidden>Spiel starten</button>
       <p id="lb-wait" class="waiting" hidden>Warten auf den Host <span class="dots"><i>.</i><i>.</i><i>.</i></span></p>

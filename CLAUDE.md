@@ -10,6 +10,7 @@ Lightweight online prototype of Diplomatio, a hex-map diplomacy strategy game fo
 
 ## Run
 - Server + client: `python -m uvicorn server.app:app --host 0.0.0.0 --port 8000`, then open http://localhost:8000 (map editor: http://localhost:8000/editor)
+- Optional: `cloudflared` (`winget install --id Cloudflare.cloudflared`) lets the host create a public invite link from the lobby (Cloudflare Quick Tunnel).
 - Tests: `python -m pytest -q`
 
 ## Principles
