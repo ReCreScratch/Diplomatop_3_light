@@ -172,3 +172,12 @@ def test_diplomacy_view_and_finished_game(tmp_path):
     assert c.get(url("lobby"), params={"token": t1}).json()["status"] == "finished"
     assert c.post(url("chat"), params={"token": t1}, json={"to": None, "text": "gg"}).status_code == 200
     assert make(tmp_path).get(url("state"), params={"token": t1}).json()["winner"] == done["winner"]   # survives a restart
+
+
+def test_client_files_revalidate(tmp_path):
+    c = make(tmp_path)
+    for path in ("/", "/editor", "/client/lobby.js"):
+        assert c.get(path).headers["cache-control"] == "no-cache"
+    etag = c.get("/client/lobby.js").headers["etag"]   # unchanged client code costs only a 304
+    assert c.get("/client/lobby.js", headers={"if-none-match": etag}).status_code == 304
+    assert "cache-control" not in c.get("/api/maps").headers

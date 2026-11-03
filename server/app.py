@@ -157,6 +157,15 @@ def create_app(save_dir=None, maps_dir=None, tunnel=None):
         tunnel.stop()
         return {**tunnel.status(), "local": True}
 
+    @app.middleware("http")
+    async def revalidate(request: Request, call_next):
+        """Pages, client code and maps: the browser must check for a newer version on every load (cheap 304 if unchanged),
+        so nobody needs Ctrl+F5 after an update."""
+        response = await call_next(request)
+        if not request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.get("/")
     def index():
         return FileResponse(ROOT / "client" / "index.html")
